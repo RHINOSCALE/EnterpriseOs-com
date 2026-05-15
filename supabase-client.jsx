@@ -1,7 +1,7 @@
 // Supabase client helper for INDISA.
 // These values connect the app to the Supabase project.
 const SUPABASE_URL = "https://hrwrwwsgxpgwscatwxjg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_FlvHfMo0CGAaqFBMxPNXTQ_fQLOp-gT";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhyd3J3d3NneHBnd3NjYXR3eGpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzAzMzcsImV4cCI6MjA5NDQwNjMzN30.shUo1Q8VWD_i4AVbl_5E613rX582k7z8hYqfThswjhk";
 
 const SUPABASE_IS_READY = typeof supabase !== "undefined";
 
