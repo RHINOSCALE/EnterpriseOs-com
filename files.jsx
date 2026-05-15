@@ -62,18 +62,25 @@ function FilesPage({ session, deptScope, files, setFiles, addAudit, showToast })
     return matchSearch && matchDept && matchKind;
   });
 
-  function uploadFile(data) {
-    const id = "f" + Math.random().toString(36).slice(2,6);
+  async function uploadFile(data, file) {
+    const id = "f" + Math.random().toString(36).slice(2, 6);
+    let storagePath = null;
+    if (file && window.SUPABASE_STORAGE) {
+      const path = `${data.dept}/${id}/${file.name}`;
+      const { error } = await window.SUPABASE_STORAGE.upload(path, file);
+      if (!error) storagePath = path;
+    }
     const newFile = {
       id, ...data,
       kind: data.kind || inferKind(data.name),
       uploadedBy: session.name,
-      uploadedAt: "2026-05-14",
+      uploadedAt: new Date().toISOString().slice(0, 10),
       sharedWith: [],
+      storagePath,
     };
     setFiles(prev => [newFile, ...prev]);
     addAudit({ action: `Documento cargado: ${data.name}`, user: session.name, dept: data.dept, level: "success" });
-    showToast("Documento cargado");
+    showToast(storagePath ? "Documento guardado en Supabase Storage" : "Documento cargado");
     setUploading(false);
   }
 
@@ -84,8 +91,11 @@ function FilesPage({ session, deptScope, files, setFiles, addAudit, showToast })
     setSharing(null);
   }
 
-  function deleteFile(fid) {
+  async function deleteFile(fid) {
     const f = files.find(x => x.id === fid);
+    if (f?.storagePath && window.SUPABASE_STORAGE) {
+      await window.SUPABASE_STORAGE.remove(f.storagePath);
+    }
     setFiles(prev => prev.filter(x => x.id !== fid));
     addAudit({ action: `Documento eliminado: ${f?.name}`, user: session.name, dept: f?.dept || "gg", level: "warn" });
     showToast("Documento eliminado");
@@ -270,7 +280,16 @@ function FilesPage({ session, deptScope, files, setFiles, addAudit, showToast })
   );
 }
 
-function downloadFile(f) {
+async function downloadFile(f) {
+  if (f.storagePath && window.SUPABASE_STORAGE) {
+    const url = await window.SUPABASE_STORAGE.getSignedUrl(f.storagePath);
+    if (url) {
+      const a = document.createElement("a");
+      a.href = url; a.download = f.name; a.target = "_blank";
+      document.body.appendChild(a); a.click(); a.remove();
+      return;
+    }
+  }
   const D = window.INDISA_DATA;
   const dept = D.DEPT_BY_ID[f.dept];
   let content = "";
@@ -425,19 +444,24 @@ function UploadModal({ session, effDept, onClose, onUpload }) {
   const [dept, setDept] = useState(effDept || session.dept || "gg");
   const [size, setSize] = useState(150_000);
   const [confidential, setConfidential] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [busy, setBusy] = useState(false);
   const fileRef = useRef();
 
   function handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setSelectedFile(file);
     setName(file.name);
     setSize(file.size);
     setKind(inferKind(file.name));
   }
 
-  function submit() {
+  async function submit() {
     if (!name.trim()) return;
-    onUpload({ name: name.trim(), kind, dept, size, confidential });
+    setBusy(true);
+    await onUpload({ name: name.trim(), kind, dept, size, confidential }, selectedFile);
+    setBusy(false);
   }
 
   return (
@@ -477,8 +501,8 @@ function UploadModal({ session, effDept, onClose, onUpload }) {
         </div>
         <div className="modal__ft">
           <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn btn--primary" disabled={!name.trim()} onClick={submit} style={{opacity: !name.trim() ? 0.5 : 1}}>
-            <Icon name="plus" size={14}/> Cargar documento
+          <button className="btn btn--primary" disabled={!name.trim() || busy} onClick={submit} style={{opacity: (!name.trim() || busy) ? 0.5 : 1}}>
+            <Icon name="plus" size={14}/> {busy ? "Subiendo…" : "Cargar documento"}
           </button>
         </div>
       </div>

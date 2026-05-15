@@ -52,6 +52,32 @@ window.SUPABASE_STATE = {
   },
 };
 
+window.SUPABASE_STORAGE = {
+  async upload(path, file) {
+    const client = getSupabaseClient();
+    if (!client) return { error: "No client" };
+    const { data, error } = await client.storage
+      .from("documentos")
+      .upload(path, file, { upsert: true });
+    return { data, error };
+  },
+
+  async getSignedUrl(path) {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    const { data } = await client.storage
+      .from("documentos")
+      .createSignedUrl(path, 3600);
+    return data?.signedUrl || null;
+  },
+
+  async remove(path) {
+    const client = getSupabaseClient();
+    if (!client) return;
+    await client.storage.from("documentos").remove([path]);
+  },
+};
+
 window.SUPABASE_AUTH = {
   isReady() {
     return !!getSupabaseClient();
