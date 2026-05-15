@@ -1,7 +1,7 @@
 // INDISA Enterprise OS — App router
 const { useState: uS, useEffect: uE, useMemo: uM } = React;
 
-// Persistent state hook — syncs with localStorage so data survives reloads/logouts
+// Persistent state hook — syncs with localStorage and, when configured, saves data to Supabase.
 const LS_PREFIX = "indisa_v1_";
 function usePersistentState(key, initial) {
   const [value, setValue] = uS(() => {
@@ -11,9 +11,44 @@ function usePersistentState(key, initial) {
     } catch (e) {}
     return initial;
   });
+  const [supabaseLoaded, setSupabaseLoaded] = uS(false);
+
   uE(() => {
     try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch (e) {}
   }, [key, value]);
+
+  uE(() => {
+    let cancelled = false;
+    async function loadRemote() {
+      const state = window.SUPABASE_STATE;
+      if (!state || !window.SUPABASE?.client) {
+        setSupabaseLoaded(true);
+        return;
+      }
+      try {
+        const remoteValue = await state.load(key, initial);
+        if (!cancelled && remoteValue !== undefined) {
+          setValue(remoteValue);
+        }
+      } catch (error) {
+        console.warn("Supabase state load failed for", key, error);
+      } finally {
+        if (!cancelled) setSupabaseLoaded(true);
+      }
+    }
+    loadRemote();
+    return () => { cancelled = true; };
+  }, [key, initial]);
+
+  uE(() => {
+    if (!supabaseLoaded) return;
+    const state = window.SUPABASE_STATE;
+    if (!state || !window.SUPABASE?.client) return;
+    state.save(key, value).catch((error) => {
+      console.warn("Supabase state save failed for", key, error);
+    });
+  }, [key, value, supabaseLoaded]);
+
   return [value, setValue];
 }
 
@@ -49,6 +84,37 @@ function App() {
   // Expose scope-switcher to nested components
   uE(() => { window.__indisaScopeTo = (d) => { setDeptScope(d); setView("dashboard"); }; }, []);
 
+  uE(() => {
+    let cancelled = false;
+    let subscription = null;
+
+    async function initAuth() {
+      if (!window.SUPABASE_AUTH) return;
+      const sessionData = await window.SUPABASE_AUTH.getSession();
+      if (cancelled) return;
+      const authUser = sessionData?.user;
+      if (authUser) {
+        const profile = await window.SUPABASE_AUTH.loadProfileById(authUser.id);
+        if (!cancelled && profile) {
+          setSession({ email: profile.email, ...profile });
+          setUsers(prev => ({ ...prev, [profile.email.toLowerCase()]: profile }));
+        }
+      }
+      subscription = window.SUPABASE_AUTH.onAuthStateChange((event, session) => {
+        if (!session?.session?.user) {
+          setSession(null);
+        }
+      });
+    }
+
+    initAuth();
+
+    return () => {
+      cancelled = true;
+      if (subscription?.unsubscribe) subscription.unsubscribe();
+    };
+  }, []);
+
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
@@ -64,12 +130,17 @@ function App() {
     if (codeUsed) {
       // First-time login with code: register user and increment uses
       setCodes(prev => prev.map(c => c.code === codeUsed ? { ...c, uses: c.uses + 1 } : c));
-      setUsers(prev => ({ ...prev, [s.email.toLowerCase()]: {
-        role: s.role, dept: s.dept, deptName: s.deptName, name: s.name, code: codeUsed,
-        password: s.password,
-        registeredAt: "2026-05-14",
-      }}));
     }
+    setUsers(prev => ({ ...prev, [s.email.toLowerCase()]: {
+      email: s.email,
+      role: s.role,
+      dept: s.dept,
+      deptName: s.deptName,
+      name: s.name,
+      code: s.code || codeUsed,
+      avatar_color: s.avatar_color || prev[s.email.toLowerCase()]?.avatar_color || "#5E66FF",
+      registeredAt: "2026-05-14",
+    }}));
     setDeptScope(null);
     setView("dashboard");
   }
@@ -79,13 +150,9 @@ function App() {
     setSession(null);
   }
 
-  function resetPassword(emailKey, newPassword) {
-    setUsers(prev => ({ ...prev, [emailKey]: { ...prev[emailKey], password: newPassword } }));
-    addAudit({ action: `Contraseña restablecida: ${emailKey}`, user: emailKey, dept: null, level: "warn" });
-  }
 
   if (!session) {
-    return <Auth codes={codes} users={users} onLogin={login} addAudit={addAudit} onResetPassword={resetPassword}/>;
+    return <Auth codes={codes} users={users} onLogin={login} addAudit={addAudit}/>;
   }
 
   const role = session.role;

@@ -1,7 +1,7 @@
 // Login flow + access code validation (Spanish)
 const { useState, useEffect } = React;
 
-function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
+function Auth({ codes, users, onLogin, addAudit }) {
   const [stage, setStage] = useState("login");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -11,39 +11,62 @@ function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
   const [validating, setValidating] = useState(false);
   const [step, setStep] = useState(0);
   const [returningUser, setReturningUser] = useState(null);
+  const [authProfile, setAuthProfile] = useState(null);
 
   const D = window.INDISA_DATA;
   const registered = users || {};
-  const existingUser = email ? registered[email.toLowerCase().trim()] : null;
+  const cleanEmail = email.toLowerCase().trim();
+  const localProfile = cleanEmail && registered[cleanEmail] ? registered[cleanEmail] : null;
+  const existingUser = localProfile || authProfile;
   const isReturning = !!existingUser;
 
-  function submitLogin(e) {
+  useEffect(() => {
+    let cancelled = false;
+    setAuthProfile(null);
+
+    if (!cleanEmail.includes("@")) return;
+    if (localProfile) return;
+
+    async function loadRemoteProfile() {
+      const profile = await window.SUPABASE_AUTH?.loadProfileByEmail?.(cleanEmail);
+      if (!cancelled) {
+        setAuthProfile(profile);
+      }
+    }
+
+    loadRemoteProfile().catch(() => {});
+    return () => { cancelled = true; };
+  }, [cleanEmail, localProfile]);
+
+  async function submitLogin(e) {
     e.preventDefault();
     setErr("");
-    const cleanEmail = email.toLowerCase().trim();
-    if (!cleanEmail.includes("@")) {setErr("Ingresa un correo válido.");return;}
-    if (password.length < 4) {setErr("La contraseña debe tener al menos 4 caracteres.");return;}
+
+    if (!cleanEmail.includes("@")) {
+      setErr("Ingresa un correo válido.");
+      return;
+    }
+    if (password.length < 4) {
+      setErr("La contraseña debe tener al menos 4 caracteres.");
+      return;
+    }
 
     if (existingUser) {
-      // Returning user — MUST match stored password
-      if (!existingUser.password) {
-        setErr("Cuenta sin contraseña configurada. Comunícate con el administrador.");
-        addAudit({ action: `Login fallido (cuenta legacy sin password): ${cleanEmail}`, user: cleanEmail, dept: null, level: "warn" });
+      const { error, data } = await window.SUPABASE_AUTH.signIn(cleanEmail, password);
+      if (error) {
+        setErr(error.message || "Correo o contraseña incorrectos.");
+        addAudit({ action: `Login fallido · ${cleanEmail}`, user: cleanEmail, dept: null, level: "warn" });
         return;
       }
-      if (existingUser.password !== password) {
-        setErr("Correo o contraseña incorrectos.");
-        addAudit({ action: `Contraseña incorrecta: ${cleanEmail}`, user: cleanEmail, dept: null, level: "warn" });
+
+      const authUser = data?.user || await window.SUPABASE_AUTH.getUser();
+      const profile = authUser ? await window.SUPABASE_AUTH.loadProfileById(authUser.id) : existingUser;
+      if (!profile) {
+        setErr("No se encontró el perfil de usuario en Supabase.");
         return;
       }
-      // Verify their code is still valid
-      const entry = codes.find(c => c.code === existingUser.code);
-      if (!entry || entry.revoked || new Date(entry.expires) < new Date("2026-05-14")) {
-        setErr("Tu código de acceso fue revocado o ha expirado. Ingresa uno nuevo.");
-        setStage("validate");
-        return;
-      }
-      setReturningUser(existingUser);
+
+      setReturningUser(profile);
       setValidating(true);
       setStep(0);
       let i = 0;
@@ -51,21 +74,23 @@ function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
         i++; setStep(i);
         if (i >= 3) {
           clearInterval(iv);
-          const session = { email: cleanEmail, ...existingUser };
-          addAudit({ action: `Login OK · ${cleanEmail} · ${existingUser.role}${existingUser.dept ? " · " + D.DEPT_BY_ID[existingUser.dept].name : ""}`, user: session.name, dept: existingUser.dept || null, level: "success" });
+          const session = { email: cleanEmail, ...profile };
+          addAudit({ action: `Login OK · ${cleanEmail} · ${profile.role}${profile.dept ? " · " + D.DEPT_BY_ID[profile.dept].name : ""}`, user: session.name, dept: profile.dept || null, level: "success" });
           onLogin(session, null);
         }
       }, 320);
       return;
     }
 
-    // New user — name is required, then proceed to code step
-    if (!name.trim()) {setErr("Ingresa tu nombre completo.");return;}
+    if (!name.trim()) {
+      setErr("Ingresa tu nombre completo.");
+      return;
+    }
     addAudit({ action: `Registro iniciado: ${cleanEmail} (${name.trim()})`, user: cleanEmail, dept: null, level: "info" });
     setStage("validate");
   }
 
-  function submitCode(e) {
+  async function submitCode(e) {
     e.preventDefault();
     setErr("");
     const c = code.trim().toUpperCase();
@@ -91,6 +116,33 @@ function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
       setErr("Este código alcanzó su límite de uso.");
       return;
     }
+
+    const signUpResult = await window.SUPABASE_AUTH.signUp(cleanEmail, password);
+    if (signUpResult.error) {
+      setErr(signUpResult.error.message || "No se pudo registrar el usuario.");
+      return;
+    }
+
+    const authUser = signUpResult.data?.user || await window.SUPABASE_AUTH.getUser();
+    if (!authUser) {
+      setErr("No se pudo crear la cuenta en Supabase.");
+      return;
+    }
+
+    const dept = entry.dept ? D.DEPT_BY_ID[entry.dept] : null;
+    const profile = {
+      id: authUser.id,
+      email: cleanEmail,
+      name: name.trim() || (entry.role === "owner" ? "Gerente General" : entry.role === "admin" ? `Admin ${dept?.name}` : `Viewer ${dept?.name}`),
+      role: entry.role,
+      dept: dept ? dept.id : null,
+      dept_name: dept ? dept.name : "Todos los departamentos",
+      code: entry.code,
+      avatar_color: "#5E66FF",
+    };
+
+    await window.SUPABASE_AUTH.upsertProfile(profile);
+
     setValidating(true);
     setStep(0);
     const steps = 4;
@@ -100,18 +152,7 @@ function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
       setStep(i);
       if (i >= steps) {
         clearInterval(iv);
-        const dept = entry.dept ? D.DEPT_BY_ID[entry.dept] : null;
-        const session = {
-          email: email.toLowerCase().trim(),
-          role: entry.role,
-          dept: dept ? dept.id : null,
-          deptName: dept ? dept.name : "Todos los departamentos",
-          code: entry.code,
-          name: name.trim() || (entry.role === "owner" ? "Gerente General"
-                              : entry.role === "admin" ? `Admin ${dept.name}`
-                              : `Viewer ${dept.name}`),
-          password,
-        };
+        const session = { email: cleanEmail, ...profile };
         addAudit({ action: `Login OK · ${entry.code} · ${entry.role}${dept ? " · " + dept.name : ""}`, user: session.name, dept: dept ? dept.id : null, level: "success" });
         onLogin(session, entry.code);
       }
@@ -126,23 +167,24 @@ function Auth({ codes, users, onLogin, addAudit, onResetPassword }) {
   const [recConfirm, setRecConfirm] = useState("");
   const [recOk, setRecOk] = useState(false);
 
-  function submitRecover(e) {
+  async function submitRecover(e) {
     e.preventDefault();
     setErr("");
     const cleanEmail = email.toLowerCase().trim();
-    const user = registered[cleanEmail];
+    const profile = registered[cleanEmail] || authProfile;
     if (!cleanEmail.includes("@")) { setErr("Ingresa tu correo."); return; }
-    if (!user) { setErr("No existe una cuenta con ese correo."); return; }
-    // Identity verification: must enter their assigned access code
-    if (recCode.trim().toUpperCase() !== (user.code || "").toUpperCase()) {
+    if (!profile) { setErr("No existe una cuenta con ese correo."); return; }
+    if (recCode.trim().toUpperCase() !== (profile.code || "").toUpperCase()) {
       setErr("El código de acceso no coincide con esta cuenta.");
       addAudit({ action: `Recuperación fallida (código incorrecto): ${cleanEmail}`, user: cleanEmail, dept: null, level: "warn" });
       return;
     }
-    if (recPwd.length < 4) { setErr("La nueva contraseña debe tener al menos 4 caracteres."); return; }
-    if (recPwd !== recConfirm) { setErr("Las contraseñas no coinciden."); return; }
-    onResetPassword(cleanEmail, recPwd);
-    addAudit({ action: `Contraseña restablecida: ${cleanEmail}`, user: user.name, dept: user.dept || null, level: "warn" });
+    const resetResult = await window.SUPABASE_AUTH.resetPassword(cleanEmail);
+    if (resetResult.error) {
+      setErr(resetResult.error.message || "No se pudo enviar el correo de recuperación.");
+      return;
+    }
+    addAudit({ action: `Solicitud de recuperación enviada: ${cleanEmail}`, user: cleanEmail, dept: profile.dept || null, level: "info" });
     setRecOk(true);
     setErr("");
   }
