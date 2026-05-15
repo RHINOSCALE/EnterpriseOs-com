@@ -234,8 +234,10 @@ function ProfilePage({ session, setSession, users, setUsers, theme, setTheme, ad
           email={session.email}
           storedPassword={stored.password || ""}
           onClose={() => setDeletingAccount(false)}
-          onConfirm={() => {
+          onConfirm={async () => {
             const emailKey = session.email.toLowerCase();
+            const result = await window.SUPABASE_AUTH.deleteAccount?.();
+            if (result?.error) { showToast("Error al eliminar la cuenta"); return; }
             addAudit({ action: `Cuenta eliminada: ${emailKey}`, user: session.name, dept: session.dept, level: "warn" });
             setUsers(prev => { const out = { ...prev }; delete out[emailKey]; return out; });
             showToast("Cuenta eliminada");

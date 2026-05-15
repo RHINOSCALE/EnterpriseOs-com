@@ -317,26 +317,7 @@ function Auth({ codes, users, onLogin, addAudit }) {
                 {err && <div className="auth__error">{err}</div>}
               </form>
 
-              <div className="auth__codes">
-                <div className="auth__codes-title flex-c between">
-                  <span>Códigos demo · clic para autollenar</span>
-                  <span className="dim">env: dev</span>
-                </div>
-                <div className="auth__codes-list">
-                  {codes.filter((c) => !c.revoked && new Date(c.expires) >= new Date("2026-05-14") && c.uses < c.max).slice(0, 4).map((c) =>
-                <div key={c.code} className="auth__codes-row" onClick={() => quickCode(c.code)}>
-                      <span>{c.code}</span>
-                      <span className="r">{c.role.toUpperCase()}{c.dept ? " · " + D.DEPT_BY_ID[c.dept].short : ""}</span>
-                    </div>
-                )}
-                  <div className="auth__codes-row" onClick={() => quickCode("INDISA-DEMO-EXPIRED")} style={{ opacity: .7 }}>
-                    <span>INDISA-DEMO-EXPIRED</span>
-                    <span className="r" style={{ color: "var(--danger)" }}>EXPIRADO</span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="muted" style={{ marginTop: 16, fontSize: 12, display: "flex", justifyContent: "space-between" }}>
+<p className="muted" style={{ marginTop: 16, fontSize: 12, display: "flex", justifyContent: "space-between" }}>
                 <span><Icon name="shield" size={12} /> Códigos únicos, revocables y con expiración.</span>
                 <span style={{ cursor: "pointer" }} onClick={() => setStage("login")}>← Volver</span>
               </p>

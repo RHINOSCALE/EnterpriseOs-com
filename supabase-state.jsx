@@ -104,6 +104,15 @@ window.SUPABASE_AUTH = {
     return await client.auth.signOut();
   },
 
+  async deleteAccount() {
+    const client = getSupabaseClient();
+    if (!client) return { error: { message: "Supabase no está disponible." } };
+    const { error } = await client.rpc("delete_own_account");
+    if (error) return { error };
+    await client.auth.signOut();
+    return { error: null };
+  },
+
   async resetPassword(email) {
     const client = getSupabaseClient();
     if (!client) return { error: { message: "Supabase no está disponible." } };
