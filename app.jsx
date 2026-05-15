@@ -97,11 +97,17 @@ function App() {
         const profile = await window.SUPABASE_AUTH.loadProfileById(authUser.id);
         if (!cancelled && profile) {
           setSession({ email: profile.email, ...profile });
-          setUsers(prev => ({ ...prev, [profile.email.toLowerCase()]: profile }));
         }
       }
+
+      const allProfiles = await window.SUPABASE_AUTH.loadAllProfiles?.() || [];
+      if (!cancelled && allProfiles.length > 0) {
+        const profileMap = {};
+        allProfiles.forEach(p => { profileMap[p.email.toLowerCase()] = p; });
+        setUsers(prev => ({ ...prev, ...profileMap }));
+      }
       subscription = window.SUPABASE_AUTH.onAuthStateChange((event, session) => {
-        if (!session?.session?.user) {
+        if (!session?.user) {
           setSession(null);
         }
       });

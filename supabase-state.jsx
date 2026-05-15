@@ -141,6 +141,19 @@ window.SUPABASE_AUTH = {
     return data;
   },
 
+  async loadAllProfiles() {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    const { data, error } = await client
+      .from(SUPABASE_PROFILE_TABLE)
+      .select("*");
+    if (error) {
+      console.warn("Supabase load all profiles error:", error);
+      return [];
+    }
+    return data || [];
+  },
+
   async upsertProfile(profile) {
     const client = getSupabaseClient();
     if (!client) return null;
