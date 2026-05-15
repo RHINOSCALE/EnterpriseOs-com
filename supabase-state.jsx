@@ -107,8 +107,10 @@ window.SUPABASE_AUTH = {
   async deleteAccount() {
     const client = getSupabaseClient();
     if (!client) return { error: { message: "Supabase no está disponible." } };
-    const { error } = await client.rpc("delete_own_account");
-    if (error) return { error };
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return { error: { message: "No hay sesión activa." } };
+    await client.from(SUPABASE_PROFILE_TABLE).delete().eq("id", user.id);
+    await client.rpc("delete_own_account");
     await client.auth.signOut();
     return { error: null };
   },

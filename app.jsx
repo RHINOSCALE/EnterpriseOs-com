@@ -104,7 +104,7 @@ function App() {
       if (!cancelled && allProfiles.length > 0) {
         const profileMap = {};
         allProfiles.forEach(p => { profileMap[p.email.toLowerCase()] = p; });
-        setUsers(prev => ({ ...prev, ...profileMap }));
+        setUsers(profileMap);
       }
       subscription = window.SUPABASE_AUTH.onAuthStateChange((event, session) => {
         if (!session?.user) {
