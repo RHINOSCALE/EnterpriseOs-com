@@ -117,13 +117,26 @@ function Auth({ codes, users, onLogin, addAudit }) {
       return;
     }
 
+    let authUser = null;
     const signUpResult = await window.SUPABASE_AUTH.signUp(cleanEmail, password);
     if (signUpResult.error) {
-      setErr(signUpResult.error.message || "No se pudo registrar el usuario.");
-      return;
+      const alreadyExists = signUpResult.error.message?.toLowerCase().includes("already registered") ||
+                            signUpResult.error.message?.toLowerCase().includes("already been registered");
+      if (!alreadyExists) {
+        setErr(signUpResult.error.message || "No se pudo registrar el usuario.");
+        return;
+      }
+      // Email exists in Auth but no profile — sign in and recover
+      const signInResult = await window.SUPABASE_AUTH.signIn(cleanEmail, password);
+      if (signInResult.error) {
+        setErr("Este correo ya está registrado. Verifica tu contraseña o contacta al administrador.");
+        return;
+      }
+      authUser = signInResult.data?.user || await window.SUPABASE_AUTH.getUser();
+    } else {
+      authUser = signUpResult.data?.user || await window.SUPABASE_AUTH.getUser();
     }
 
-    const authUser = signUpResult.data?.user || await window.SUPABASE_AUTH.getUser();
     if (!authUser) {
       setErr("No se pudo crear la cuenta en Supabase.");
       return;
