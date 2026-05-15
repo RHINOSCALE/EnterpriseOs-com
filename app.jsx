@@ -70,8 +70,11 @@ function App() {
   const [files, setFiles] = usePersistentState("files", D.INITIAL_FILES || []);
   const [events, setEvents] = usePersistentState("events", D.INITIAL_EVENTS || []);
   const [departments, setDepartments] = usePersistentState("departments", D.DEPARTMENTS);
-  // Registered users: email → { role, dept, deptName, name, code } — so they can re-login without re-entering the code
-  const [users, setUsers] = usePersistentState("users", {});
+  // Users always loaded fresh from profiles table — never persisted to app_state
+  const [users, setUsers] = uS(() => {
+    try { localStorage.removeItem("indisa_v1_users"); } catch (e) {}
+    return {};
+  });
 
   // Keep window.INDISA_DATA in sync with departments state so other modules see deletions
   uE(() => {
