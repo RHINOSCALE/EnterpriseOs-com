@@ -106,7 +106,7 @@ function Auth({ codes, users, onLogin, addAudit }) {
       setErr("Este código fue revocado.");
       return;
     }
-    if (new Date(entry.expires) < new Date("2026-05-14")) {
+    if (new Date(entry.expires) < new Date()) {
       addAudit({ action: `Código expirado intentado: ${c}`, user: email, dept: null, level: "warn" });
       setErr("Este código ha expirado.");
       return;
