@@ -16,7 +16,9 @@ function createSupabaseClient() {
     return null;
   }
 
-  return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  });
 }
 
 window.SUPABASE = {

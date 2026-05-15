@@ -90,16 +90,6 @@ function App() {
 
     async function initAuth() {
       if (!window.SUPABASE_AUTH) return;
-      const sessionData = await window.SUPABASE_AUTH.getSession();
-      if (cancelled) return;
-      const authUser = sessionData?.user;
-      if (authUser) {
-        const profile = await window.SUPABASE_AUTH.loadProfileById(authUser.id);
-        if (!cancelled && profile) {
-          setSession({ email: profile.email, ...profile });
-        }
-      }
-
       const allProfiles = await window.SUPABASE_AUTH.loadAllProfiles?.() || [];
       if (!cancelled && allProfiles.length > 0) {
         const profileMap = {};
