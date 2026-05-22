@@ -876,7 +876,7 @@ a { color: inherit; text-decoration: none; }
 }
 [data-theme="dark"] .kpi-corp-hd { background: #0f172a; }
 
-.kpi-tbl-outer { overflow-x: auto; }
+.kpi-tbl-outer { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 240px); }
 .kpi-tbl {
   width: max-content;
   border-collapse: separate;
@@ -906,12 +906,13 @@ a { color: inherit; text-decoration: none; }
 
 /* Section separator rows */
 .kpi-sect-row td {
-  background: #1e293b; color: #e2e8f0;
-  padding: 9px 16px; font-size: 12px; font-weight: 600; letter-spacing: .02em;
-  border-top: 2px solid #2d3f57; border-bottom: 1px solid #2d3f57;
+  background: var(--bg-1); color: var(--text-1);
+  padding: 8px 16px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  border-top: 2px solid var(--line-2); border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
-[data-theme="dark"] .kpi-sect-row td { background: #0f172a; border-color: #1e2d42; }
+[data-theme="dark"] .kpi-sect-row td { background: var(--bg-2); border-color: var(--line-2); }
 
 /* Data rows */
 .kpi-data-row { background: var(--panel); }
