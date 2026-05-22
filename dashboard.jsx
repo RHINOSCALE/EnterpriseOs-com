@@ -1,12 +1,18 @@
 // Dashboard Ejecutivo — matches the corporate mockup layout
 const { useState, useEffect, useMemo, useRef } = React;
 
+const MONTH_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MONTH_SHORT_ES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
 function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const effDept = role === "owner" ? deptScope : session.dept;
   const ctx = effDept ? D.DEPT_BY_ID[effDept].name : "INDISA";
-  const [period, setPeriod] = useState("Mayo 2026");
+  const _now = new Date();
+  const curYear = _now.getFullYear();
+  const curQuarter = Math.ceil((_now.getMonth() + 1) / 3);
+  const [period, setPeriod] = useState(() => `${MONTH_ES[_now.getMonth()]} ${curYear}`);
   const [periodOpen, setPeriodOpen] = useState(false);
 
   function exportReport(deptScores, avgScore, totalProjects, totalTasks, kpisRed) {
@@ -39,10 +45,10 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
     showToast(`Reporte ${period} descargado`);
   }
 
-  // Compute department health scores from kpiWeekly (Q2 2026) with fallback to legacy kpis
+  // Compute department health scores from kpiWeekly (current quarter) with fallback to legacy kpis
   const deptScores = useMemo(() => {
     return D.DEPARTMENTS.map(d => {
-      const key = `${d.id}_2026_2`;
+      const key = `${d.id}_${curYear}_${curQuarter}`;
       const weeklyList = (kpiWeekly || {})[key] || [];
       let score, critical;
       if (weeklyList.length > 0) {
@@ -84,7 +90,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
     proyectos: [78, 76, 79, 82, 81, 84, 85, 87],
     kpis:      [82, 80, 81, 83, 82, 83, 85, 86],
     tareas:    [70, 72, 74, 75, 78, 80, 82, 83],
-    months:    ["Jul","Ago","Sep","Oct","Nov","Dic","Ene","Feb"],
+    months:    Array.from({length: 8}, (_, i) => MONTH_SHORT_ES[new Date(_now.getFullYear(), _now.getMonth() - 7 + i, 1).getMonth()]),
   }), []);
 
   // Radar dimensions (Scorecard Empresarial)
@@ -106,7 +112,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
       <div className="page__hd">
         <div>
           <h1 className="page__title">Dashboard Ejecutivo</h1>
-          <p className="page__sub">Resumen global de operaciones INDISA — Mayo 2026</p>
+          <p className="page__sub">Resumen global de operaciones INDISA — {period}</p>
         </div>
         <div className="page__actions">
           <div style={{position: "relative"}}>
@@ -115,7 +121,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
             </button>
             {periodOpen && (
               <div style={{position: "absolute", right: 0, top: "calc(100% + 6px)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 6, zIndex: 40, minWidth: 180, boxShadow: "var(--shadow-2)"}}>
-                {["Enero 2026","Febrero 2026","Marzo 2026","Abril 2026","Mayo 2026","Q1 2026","Q2 2026","YTD 2026"].map(p => (
+                {[...MONTH_ES.slice(0, _now.getMonth() + 1).map(m => `${m} ${curYear}`), `Q1 ${curYear}`, `Q2 ${curYear}`, `Q3 ${curYear}`, `Q4 ${curYear}`, `YTD ${curYear}`].map(p => (
                   <div key={p} onClick={() => { setPeriod(p); setPeriodOpen(false); showToast(`Periodo: ${p}`); }}
                     style={{padding: "7px 10px", borderRadius: 6, cursor: "pointer", fontSize: 13, background: period === p ? "var(--accent-soft)" : "transparent", color: period === p ? "var(--accent)" : "var(--text)"}}>
                     {p}
@@ -137,7 +143,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
 
       {/* KPI strip — Score Global hero + 4 metric cards */}
       <div className="row row--5" style={{marginBottom: 14}}>
-        <ScoreGlobalCard score={avgScore} deptCount={deptScores.length}/>
+        <ScoreGlobalCard score={avgScore} deptCount={deptScores.length} curQuarter={curQuarter} curYear={curYear}/>
         <MetricCard label="Proyectos Activos" value={totalProjects} sub={`${totalRisk} en riesgo`} delta={+4} deltaLabel="vs mes ant." icon="folder"/>
         <MetricCard label="Tareas Pendientes" value={totalTasks} sub="" delta={-12} deltaLabel="esta semana" icon="checkbox" deltaIsBad={false}/>
         <MetricCard label="KPIs en Rojo" value={kpisRed} sub="" delta={0} deltaLabel="Sin cambio" icon="warn" valueColor={kpisRed > 0 ? "var(--danger)" : "var(--text)"}/>
@@ -195,7 +201,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
 }
 
 // ===== Score Global hero KPI =====
-function ScoreGlobalCard({ score, deptCount }) {
+function ScoreGlobalCard({ score, deptCount, curQuarter, curYear }) {
   // Animated ring value
   const [shown, setShown] = useState(0);
   useEffect(() => {
@@ -233,7 +239,7 @@ function ScoreGlobalCard({ score, deptCount }) {
           <div className="kpi__value" style={{margin: 0, fontSize: 30}}>{shown}%</div>
           <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Performance global</div>
           <div className="kpi__sub" style={{marginLeft: 0, fontSize: 11, marginTop: 4, opacity: 0.85}}>
-            Promedio({deptCount || 12} deptos) · KPIs Q2 2026
+            Promedio({deptCount || 12} deptos) · KPIs Q{curQuarter || 2} {curYear || new Date().getFullYear()}
           </div>
         </div>
       </div>

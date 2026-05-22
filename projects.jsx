@@ -154,7 +154,7 @@ function ProjectsPage({ session, deptScope, projects, setProjects, addAudit, sho
       )}
 
       {view === "timeline" && (
-        <Card title="Cronograma · Q2 2026" sub="duración estimada · 30 días por proyecto" headerExtra={
+        <Card title={`Cronograma · Q${Math.ceil((new Date().getMonth()+1)/3)} ${new Date().getFullYear()}`} sub="duración estimada · 30 días por proyecto" headerExtra={
           <div className="legend-pills">
             <span className="lp"><span className="sw" style={{background: "var(--danger)"}}/> Alta</span>
             <span className="lp"><span className="sw" style={{background: "var(--warning)"}}/> Media</span>
@@ -223,7 +223,7 @@ function NewProjectModal({ session, effDept, onClose, onCreate }) {
   const [dept, setDept] = useState(effDept || "ing");
   const [prio, setPrio] = useState("med");
   const [status, setStatus] = useState("todo");
-  const [due, setDue] = useState("2026-07-30");
+  const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return d.toISOString().slice(0, 10); });
   const [tag, setTag] = useState("");
 
   function submit() {
@@ -284,9 +284,11 @@ function NewProjectModal({ session, effDept, onClose, onCreate }) {
 
 function Timeline({ items, onOpen }) {
   const D = window.INDISA_DATA;
-  const start = new Date("2026-05-01"); const end = new Date("2026-08-31");
+  const _tnow = new Date();
+  const start = new Date(_tnow.getFullYear(), _tnow.getMonth(), 1);
+  const end = new Date(_tnow.getFullYear(), _tnow.getMonth() + 4, 0);
   const total = (end - start) / 86400000;
-  const today = new Date("2026-05-14");
+  const today = _tnow;
   const todayPct = ((today - start) / 86400000) / total * 100;
   const fmt = (d) => d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
 
@@ -310,7 +312,7 @@ function Timeline({ items, onOpen }) {
       <div style={{display: "grid", gridTemplateColumns: `300px 1fr`, gap: 0, position: "relative", minWidth: 760}}>
         <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, paddingBottom: 8}}>Proyecto</div>
         <div style={{position: "relative", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid var(--line)", paddingBottom: 6, marginBottom: 6}}>
-          {["Mayo","Junio","Julio","Agosto"].map(m => <div key={m} className="dim mono" style={{fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: ".06em"}}>{m}</div>)}
+          {Array.from({length: 4}, (_, i) => new Date(_tnow.getFullYear(), _tnow.getMonth() + i, 1).toLocaleDateString("es-CO", {month: "long"})).map(m => <div key={m} className="dim mono" style={{fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: ".06em"}}>{m}</div>)}
         </div>
       </div>
 
@@ -398,8 +400,14 @@ function Timeline({ items, onOpen }) {
 }
 
 function Calendar({ items }) {
-  const month = new Date(2026, 4, 1);
-  const days = 31;
+  const _cnow = new Date();
+  const _cYr = _cnow.getFullYear();
+  const _cMo = _cnow.getMonth();
+  const month = new Date(_cYr, _cMo, 1);
+  const days = new Date(_cYr, _cMo + 1, 0).getDate();
+  const todayDay = _cnow.getDate();
+  const yrStr = String(_cYr);
+  const moStr = String(_cMo + 1).padStart(2, "0");
   const startDay = month.getDay();
   const cells = [];
   for (let i = 0; i < startDay; i++) cells.push(null);
@@ -409,8 +417,8 @@ function Calendar({ items }) {
       <div style={{display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4}}>
         {["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(d => <div key={d} className="dim mono" style={{fontSize: 10, textTransform: "uppercase", textAlign: "center", padding: "4px 0"}}>{d}</div>)}
         {cells.map((d, i) => {
-          const due = d ? items.filter(p => p.due === `2026-05-${String(d).padStart(2,"0")}`) : [];
-          const today = d === 14;
+          const due = d ? items.filter(p => p.due === `${yrStr}-${moStr}-${String(d).padStart(2,"0")}`) : [];
+          const today = d === todayDay;
           return (
             <div key={i} style={{minHeight: 84, padding: 6, border: "1px solid var(--line)", borderRadius: 6, background: d ? "var(--panel)" : "transparent"}}>
               {d && <div className="mono" style={{fontSize: 11, color: today ? "var(--accent)" : "var(--text-2)", fontWeight: today ? 600 : 400}}>

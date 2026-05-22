@@ -102,7 +102,9 @@ function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
   }
 
   function exportPOA() {
-    const body = window.buildPOAReport(poa, D.DEPARTMENTS, D.DEPT_BY_ID, D.POA_TYPES, "Mayo 2026");
+    const _mn = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const _nd = new Date();
+    const body = window.buildPOAReport(poa, D.DEPARTMENTS, D.DEPT_BY_ID, D.POA_TYPES, `${_mn[_nd.getMonth()]} ${_nd.getFullYear()}`);
     window.exportPDF("POA · Plan Operativo Anual", body, "POA_INDISA_2026.pdf");
     addAudit({ action: "POA exportado a PDF", user: session.name, dept: null, level: "info" });
     showToast("Generando PDF…");

@@ -88,7 +88,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
   const completed = filtered.filter(t => t.status === "completed").length;
   const inProgress = filtered.filter(t => t.status === "in_progress").length;
   const blocked = filtered.filter(t => t.status === "blocked").length;
-  const overdue = filtered.filter(t => t.status !== "completed" && new Date(t.due_date) < new Date("2026-05-14")).length;
+  const overdue = filtered.filter(t => t.status !== "completed" && new Date(t.due_date) < new Date()).length;
 
   return (
     <div className="page">
@@ -153,7 +153,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
                   {items.map(t => {
                     const checks = t.checklist.length;
                     const done = t.checklist.filter(c => c.done).length;
-                    const isOverdue = t.status !== "completed" && new Date(t.due_date) < new Date("2026-05-14");
+                    const isOverdue = t.status !== "completed" && new Date(t.due_date) < new Date();
                     return (
                       <div key={t.id}
                         className={"kcard " + (dragId === t.id ? "dragging" : "")}
@@ -360,7 +360,7 @@ function NewTaskModal({ session, effDept, projects, onClose, onCreate }) {
   const [project, setProject] = useState("");
   const [prio, setPrio] = useState("medium");
   const [status, setStatus] = useState("pending");
-  const [due, setDue] = useState("2026-06-30");
+  const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
   const [assignee, setAssignee] = useState(initials(session.name));
 
   const projOptions = projects[dept] || [];

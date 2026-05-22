@@ -17,7 +17,7 @@ function createSupabaseClient() {
   }
 
   return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: true },
   });
 }
 

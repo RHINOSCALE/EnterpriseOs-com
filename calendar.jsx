@@ -221,7 +221,7 @@ function CalendarPage({ session, deptScope, projects, setProjects, tasks, setTas
             {filtered
               .filter(e => e.date)
               .filter(e => {
-                const d = new Date(e.date); const now = new Date("2026-05-14");
+                const d = new Date(e.date); const now = new Date();
                 return d >= now && d <= new Date(now.getTime() + 7*86400000);
               })
               .sort((a,b) => a.date.localeCompare(b.date))
@@ -344,7 +344,7 @@ function CalendarPage({ session, deptScope, projects, setProjects, tasks, setTas
 function NewEventModal({ session, effDept, initialDate, onClose, onCreate }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(initialDate || "2026-05-20");
+  const [date, setDate] = useState(initialDate || new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("10:00");
   const [type, setType] = useState("meeting");
   const [dept, setDept] = useState(effDept || (session.dept || "gg"));

@@ -181,8 +181,8 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
   const readOnly = role === "viewer";
   const effDept = role === "owner" ? deptScope : session.dept;
 
-  const [year, setYear] = useState(2026);
-  const [quarter, setQuarter] = useState(2);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [quarter, setQuarter] = useState(() => Math.ceil((new Date().getMonth() + 1) / 3));
   const [addingKpi, setAddingKpi] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -300,7 +300,7 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
             ))}
             <select className="input" value={year} onChange={e => setYear(+e.target.value)}
               style={{ width: 80, height: 32, fontSize: 12, padding: "0 6px" }}>
-              {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+              {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
           {readOnly && <span className="chip"><Icon name="lock" size={11} /> Solo lectura</span>}

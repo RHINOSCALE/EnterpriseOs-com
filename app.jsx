@@ -100,6 +100,14 @@ function App() {
         allProfiles.forEach(p => { profileMap[p.email.toLowerCase()] = p; });
         setUsers(profileMap);
       }
+      // Restore existing session on page load / refresh
+      const existingSession = await window.SUPABASE_AUTH.getSession();
+      if (!cancelled && existingSession?.user) {
+        const profile = await window.SUPABASE_AUTH.loadProfileById(existingSession.user.id);
+        if (!cancelled && profile) {
+          setSession({ email: profile.email, ...profile });
+        }
+      }
       subscription = window.SUPABASE_AUTH.onAuthStateChange((event, session) => {
         if (!session?.user) {
           setSession(null);
@@ -121,7 +129,7 @@ function App() {
   }
 
   function addAudit({ action, user, dept, level }) {
-    const now = "2026-05-14 " + new Date().toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" });
+    const now = new Date().toISOString().slice(0, 10) + " " + new Date().toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit" });
     setAudit(prev => [{ ts: now, action, user, dept, level: level || "info" }, ...prev]);
   }
 
@@ -139,7 +147,7 @@ function App() {
       name: s.name,
       code: s.code || codeUsed,
       avatar_color: s.avatar_color || prev[s.email.toLowerCase()]?.avatar_color || "#5E66FF",
-      registeredAt: "2026-05-14",
+      registeredAt: new Date().toISOString().slice(0, 10),
     }}));
     setDeptScope(null);
     setView("dashboard");

@@ -306,7 +306,7 @@ function NotificationsBell({ audit, searchData, departments, role, session, setV
 
   const notifications = useMemo(() => {
     const out = [];
-    const today = new Date("2026-05-14");
+    const today = new Date();
     // Overdue tasks
     (searchData?.tasks || []).filter(t => t.status !== "completed" && new Date(t.due_date) < today)
       .slice(0, 4).forEach(t => out.push({ level: "bad", icon: "warn", title: `Tarea vencida: ${t.title}`, sub: `${D.DEPT_BY_ID[t.department]?.name} · venció ${t.due_date}`, go: () => setView("tasks") }));

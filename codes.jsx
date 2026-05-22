@@ -7,7 +7,7 @@ function CodesPage({ session, codes, setCodes, addAudit, showToast }) {
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState("active");
 
-  const today = new Date("2026-05-14");
+  const today = new Date();
   const all = codes.filter(c => role === "owner" ? true : c.dept === session.dept);
   const filtered = all.filter(c => {
     const expired = new Date(c.expires) < today;
@@ -27,7 +27,7 @@ function CodesPage({ session, codes, setCodes, addAudit, showToast }) {
     showToast("Copiado al portapapeles");
   }
   function createCode(payload) {
-    const newCode = { ...payload, uses: 0, revoked: false, createdBy: session.name, createdAt: "2026-05-14" };
+    const newCode = { ...payload, uses: 0, revoked: false, createdBy: session.name, createdAt: new Date().toISOString().slice(0, 10) };
     setCodes(prev => [newCode, ...prev]);
     addAudit({ action: `Código creado · ${payload.code}`, user: session.name, dept: payload.dept || "gg", level: "success" });
     showToast(`Código ${payload.code} creado`);
@@ -132,7 +132,7 @@ function CreateCodeModal({ role, session, onClose, onCreate }) {
   const [r, setR] = useState(role === "owner" ? "admin" : "viewer");
   const [dept, setDept] = useState(session.dept || "mkt");
   const [max, setMax] = useState(5);
-  const [exp, setExp] = useState("2026-12-31");
+  const [exp, setExp] = useState(() => `${new Date().getFullYear()}-12-31`);
   const [singleUse, setSingleUse] = useState(false);
   const [prefix, setPrefix] = useState("INDISA");
 
