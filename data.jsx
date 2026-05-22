@@ -419,11 +419,98 @@ const NAV_SECTIONS = [
   ]},
 ];
 
+// ===== KPI Weekly (Excel-format) initial data =====
+function mkKpiW(id, label, tipo, metaSemanal, filled, acumPrevio) {
+  const seed = id.charCodeAt(0) * 3 + (id.charCodeAt(id.length - 1) || 0);
+  const semanas = Array.from({ length: 13 }, (_, i) => {
+    if (i >= filled) return null;
+    const v = metaSemanal * (1 + Math.sin(i * 1.05 + seed * 0.07) * 0.11 + Math.cos(i * 0.65 + seed * 0.04) * 0.06);
+    return Math.round(v * 10) / 10;
+  });
+  return { id, label, tipo, metaSemanal, semanas, acumuladoPrevio: acumPrevio };
+}
+
+const INITIAL_KPI_WEEKLY = {
+  "ope_2026_2": [
+    mkKpiW("prod_real",  "Producción Real",        "Cantidad",    2000, 8, 46800),
+    mkKpiW("prod_cat",   "Productos Catálogo",     "Cantidad",    1500, 8, 35100),
+    mkKpiW("prod_proy",  "Productos Proyecto",     "Cantidad",     500, 8, 11700),
+    mkKpiW("wip",        "WIP",                    "Cantidad",     150, 8,  3510),
+  ],
+  "ven_2026_2": [
+    mkKpiW("visitas",    "Visitas Comerciales",    "Cantidad",      30, 8,   702),
+    mkKpiW("cotiz",      "Cotizaciones Enviadas",  "Cantidad",      20, 8,   468),
+    mkKpiW("pedidos",    "Pedidos Cerrados",       "Cantidad",      15, 8,   351),
+    mkKpiW("factura",    "Facturación Semanal",    "Moneda",    500000, 8, 11700000),
+  ],
+  "con_2026_2": [
+    mkKpiW("fact_emit",  "Facturas Emitidas",      "Cantidad",      80, 8,  1872),
+    mkKpiW("cobros",     "Cobros Realizados",      "Moneda",    200000, 8, 4680000),
+    mkKpiW("pagos",      "Pagos Procesados",       "Cantidad",      60, 8,  1404),
+    mkKpiW("cumpl_fis",  "Cumplimiento Fiscal",    "Porcentaje",   100, 8,   800),
+  ],
+  "rh_2026_2": [
+    mkKpiW("col_act",    "Colaboradores Activos",  "Cantidad",     185, 8,     0),
+    mkKpiW("ausencias",  "Ausencias",              "Cantidad",       5, 8,    40),
+    mkKpiW("capacit",    "Capacitaciones",         "Cantidad",       8, 8,   187),
+    mkKpiW("contratac",  "Contrataciones",         "Cantidad",       3, 8,    70),
+  ],
+  "mkt_2026_2": [
+    mkKpiW("leads",      "Leads Generados",        "Cantidad",     300, 8,  7020),
+    mkKpiW("alcance",    "Alcance Digital",        "Cantidad",   15000, 8, 351000),
+    mkKpiW("conv",       "Conversiones",           "Cantidad",      45, 8,  1053),
+    mkKpiW("contenidos", "Contenidos Publicados",  "Cantidad",       5, 8,   117),
+  ],
+  "it_2026_2": [
+    mkKpiW("disponib",   "Disponibilidad Sist.",   "Porcentaje",  99.9, 8,   799),
+    mkKpiW("tickets",    "Tickets Atendidos",      "Cantidad",      50, 8,  1170),
+    mkKpiW("incident",   "Incidencias Críticas",   "Cantidad",       2, 8,    16),
+    mkKpiW("proyect",    "Proyectos Completados",  "Cantidad",       2, 8,    47),
+  ],
+  "mnt_2026_2": [
+    mkKpiW("prev",       "Órdenes Preventivas",    "Cantidad",      20, 8,   468),
+    mkKpiW("corr",       "Órdenes Correctivas",    "Cantidad",       5, 8,    39),
+    mkKpiW("t_resp",     "Tiempo Respuesta (h)",   "Tiempo",         4, 8,    32),
+    mkKpiW("dispon_eq",  "Disponibilidad Equip.",  "Porcentaje",    95, 8,   760),
+  ],
+  "com_2026_2": [
+    mkKpiW("oc",         "Órdenes de Compra",      "Cantidad",      50, 8,  1170),
+    mkKpiW("prov_eval",  "Proveedores Evaluados",  "Cantidad",       5, 8,   117),
+    mkKpiW("ahorro",     "Ahorro Semanal",         "Moneda",     20000, 8, 468000),
+    mkKpiW("ent_tpo",    "Entregas a Tiempo",      "Porcentaje",    90, 8,   720),
+  ],
+  "log_2026_2": [
+    mkKpiW("entregas",   "Entregas Realizadas",    "Cantidad",     200, 8,  4680),
+    mkKpiW("ent_tpo_l",  "Entregas a Tiempo",      "Porcentaje",    96, 8,   768),
+    mkKpiW("devoluc",    "Devoluciones",           "Cantidad",       5, 8,    39),
+    mkKpiW("costo_env",  "Costo por Envío",        "Moneda",     15000, 8, 351000),
+  ],
+  "ac_2026_2": [
+    mkKpiW("casos",      "Casos Atendidos",        "Cantidad",     150, 8,  3510),
+    mkKpiW("satisf",     "Satisfacción Cliente",   "Porcentaje",    90, 8,   720),
+    mkKpiW("t_resp_ac",  "Tiempo Respuesta (h)",   "Tiempo",         2, 8,    16),
+    mkKpiW("resueltos",  "Casos Resueltos",        "Cantidad",     140, 8,  3276),
+  ],
+  "gg_2026_2": [
+    mkKpiW("proy_est",   "Proyectos Estratégicos", "Cantidad",       3, 8,    70),
+    mkKpiW("presup",     "Presupuesto Ejecutado",  "Porcentaje",    80, 8,   640),
+    mkKpiW("enps",       "eNPS",                   "Cantidad",      50, 8,     0),
+    mkKpiW("obj_cumpl",  "Objetivos Cumplidos",    "Cantidad",       8, 8,   187),
+  ],
+  "ing_2026_2": [
+    mkKpiW("entregas_t", "Entregas Técnicas",      "Cantidad",      25, 8,   585),
+    mkKpiW("dis_apro",   "Diseños Aprobados",      "Cantidad",      15, 8,   351),
+    mkKpiW("defectos",   "Defectos Detectados",    "Cantidad",       8, 8,    63),
+    mkKpiW("lead_time",  "Lead Time (días)",       "Tiempo",         5, 8,    40),
+  ],
+};
+
 window.INDISA_DATA = {
   DEPARTMENTS, DEPT_BY_ID, INITIAL_CODES, INITIAL_KPIS, INITIAL_PROJECTS,
   INITIAL_POA, POA_TYPES, INITIAL_TASKS, PROJECT_BUDGETS,
   INITIAL_FILES, INITIAL_EVENTS,
   ORG_TREE, INITIAL_AUDIT, NAV_SECTIONS,
+  INITIAL_KPI_WEEKLY,
 };
 
 // ===== Icon set =====

@@ -62,6 +62,7 @@ function App() {
   // Persisted UI prefs + data
   const [theme, setTheme] = usePersistentState("theme", "light");
   const [kpis, setKpis] = usePersistentState("kpis", D.INITIAL_KPIS);
+  const [kpiWeekly, setKpiWeekly] = usePersistentState("kpiWeekly", D.INITIAL_KPI_WEEKLY);
   const [projects, setProjects] = usePersistentState("projects", D.INITIAL_PROJECTS);
   const [poa, setPoa] = usePersistentState("poa", D.INITIAL_POA);
   const [codes, setCodes] = usePersistentState("codes", D.INITIAL_CODES);
@@ -183,7 +184,7 @@ function App() {
       audit={audit}
     >
       {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} projects={projects} addAudit={addAudit} showToast={showToast} setView={setView}/>}
-      {effView === "kpis" && <KPIPage session={session} deptScope={deptScope} setDeptScope={setDeptScope} kpis={kpis} setKpis={setKpis} addAudit={addAudit} showToast={showToast}/>}
+      {effView === "kpis" && <KPIPage session={session} deptScope={deptScope} setDeptScope={setDeptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} addAudit={addAudit} showToast={showToast}/>}
       {effView === "projects" && <ProjectsPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} addAudit={addAudit} showToast={showToast}/>}
       {effView === "tasks" && <TasksPage session={session} deptScope={deptScope} tasks={tasks} setTasks={setTasks} projects={projects} addAudit={addAudit} showToast={showToast}/>}
       {effView === "poa" && <POAPage session={session} deptScope={deptScope} poa={poa} setPoa={setPoa} addAudit={addAudit} showToast={showToast}/>}
