@@ -21,11 +21,10 @@ function ProjectsPage({ session, deptScope, projects, setProjects, addAudit, sho
   const [deleteId, setDeleteId] = useState(null);
 
   const cols = [
-    { id: "backlog", label: "Backlog" },
-    { id: "todo",    label: "Por hacer" },
-    { id: "doing",   label: "En curso" },
-    { id: "review",  label: "Revisión" },
-    { id: "done",    label: "Hecho" },
+    { id: "todo",   label: "Por hacer" },
+    { id: "doing",  label: "En curso" },
+    { id: "review", label: "Revisión" },
+    { id: "done",   label: "Hecho" },
   ];
 
   function moveProject(pid, status) {
@@ -116,7 +115,7 @@ function ProjectsPage({ session, deptScope, projects, setProjects, addAudit, sho
       {view === "kanban" && (
         <div className="kanban">
           {cols.map(col => {
-            const items = filtered.filter(p => p.status === col.id);
+            const items = filtered.filter(p => (p.status === col.id) || (col.id === "todo" && p.status === "backlog"));
             return (
               <div key={col.id} className="kcol"
                 onDragOver={e => { if (!readOnly) e.preventDefault(); }}
@@ -257,7 +256,6 @@ function NewProjectModal({ session, effDept, onClose, onCreate }) {
             <div className="field">
               <label>Estado inicial</label>
               <select className="select" value={status} onChange={e => setStatus(e.target.value)}>
-                <option value="backlog">Backlog</option>
                 <option value="todo">Por hacer</option>
                 <option value="doing">En curso</option>
               </select>
@@ -297,7 +295,7 @@ function Timeline({ items, onOpen }) {
     review: { chip: "chip--warn",   lbl: "Revisión" },
     doing:  { chip: "chip--accent", lbl: "En curso" },
     todo:   { chip: "chip--info",   lbl: "Por hacer" },
-    backlog:{ chip: "chip",         lbl: "Backlog" },
+    backlog:{ chip: "chip--info",   lbl: "Por hacer" },
   };
   // Bar color is driven by PRIORITY
   const prioMap = {
@@ -474,8 +472,7 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
             </div>
             <div className="field">
               <label>Estado</label>
-              <select className="select" value={p.status} onChange={e => onMove(e.target.value)} disabled={readOnly}>
-                <option value="backlog">Backlog</option>
+              <select className="select" value={p.status === "backlog" ? "todo" : p.status} onChange={e => onMove(e.target.value)} disabled={readOnly}>
                 <option value="todo">Por hacer</option>
                 <option value="doing">En curso</option>
                 <option value="review">Revisión</option>

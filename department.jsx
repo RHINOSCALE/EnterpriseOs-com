@@ -415,7 +415,7 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
                             <span className={st.cls}>{st.label}</span>
                             {c.pct !== null && (
                               <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--ff-mono)" }}>
-                                {Math.round(c.pct)}%
+                                {Math.min(100, Math.round(c.pct))}%
                               </div>
                             )}
                           </td>

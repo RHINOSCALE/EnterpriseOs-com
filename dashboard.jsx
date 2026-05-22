@@ -1,7 +1,7 @@
 // Dashboard Ejecutivo — matches the corporate mockup layout
 const { useState, useEffect, useMemo, useRef } = React;
 
-function Dashboard({ session, deptScope, kpis, setKpis, projects, addAudit, showToast, setView }) {
+function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const effDept = role === "owner" ? deptScope : session.dept;
@@ -39,17 +39,34 @@ function Dashboard({ session, deptScope, kpis, setKpis, projects, addAudit, show
     showToast(`Reporte ${period} descargado`);
   }
 
-  // Compute department health scores
+  // Compute department health scores from kpiWeekly (Q2 2026) with fallback to legacy kpis
   const deptScores = useMemo(() => {
     return D.DEPARTMENTS.map(d => {
-      const list = kpis[d.id] || [];
-      const score = list.length ? Math.min(100, Math.round(list.reduce((s,k) => s + Math.min(1.0, k.value/k.target), 0) / list.length * 100)) : 60;
+      const key = `${d.id}_2026_2`;
+      const weeklyList = (kpiWeekly || {})[key] || [];
+      let score, critical;
+      if (weeklyList.length > 0) {
+        const ratios = weeklyList.map(k => {
+          const filled = k.semanas.filter(v => v !== null && v !== undefined);
+          const last = filled.length ? filled[filled.length - 1] : null;
+          return last !== null && k.metaSemanal > 0 ? Math.min(1, last / k.metaSemanal) : null;
+        }).filter(r => r !== null);
+        score = ratios.length ? Math.min(100, Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 100)) : 60;
+        critical = weeklyList.filter(k => {
+          const filled = k.semanas.filter(v => v !== null && v !== undefined);
+          const last = filled.length ? filled[filled.length - 1] : null;
+          return last !== null && k.metaSemanal > 0 && last / k.metaSemanal < 0.5;
+        }).length;
+      } else {
+        const list = kpis[d.id] || [];
+        score = list.length ? Math.min(100, Math.round(list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length * 100)) : 60;
+        critical = list.filter(k => k.value / k.target < 0.5).length;
+      }
       const open = (projects[d.id] || []).filter(p => p.status !== "done").length;
-      const tasks = (projects[d.id] || []).length * 6 + Math.floor(d.color.charCodeAt(0) % 15); // synthesize tasks count
-      const critical = list.filter(k => k.value / k.target < 0.5).length;
+      const tasks = (projects[d.id] || []).length * 6 + Math.floor(d.color.charCodeAt(0) % 15);
       return { ...d, score, open, tasks, critical };
     });
-  }, [kpis, projects]);
+  }, [kpis, kpiWeekly, projects]);
 
   const atRisk = deptScores.filter(d => d.score < 75);
 
@@ -120,7 +137,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, projects, addAudit, show
 
       {/* KPI strip — Score Global hero + 4 metric cards */}
       <div className="row row--5" style={{marginBottom: 14}}>
-        <ScoreGlobalCard score={avgScore}/>
+        <ScoreGlobalCard score={avgScore} deptCount={deptScores.length}/>
         <MetricCard label="Proyectos Activos" value={totalProjects} sub={`${totalRisk} en riesgo`} delta={+4} deltaLabel="vs mes ant." icon="folder"/>
         <MetricCard label="Tareas Pendientes" value={totalTasks} sub="" delta={-12} deltaLabel="esta semana" icon="checkbox" deltaIsBad={false}/>
         <MetricCard label="KPIs en Rojo" value={kpisRed} sub="" delta={0} deltaLabel="Sin cambio" icon="warn" valueColor={kpisRed > 0 ? "var(--danger)" : "var(--text)"}/>
@@ -178,7 +195,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, projects, addAudit, show
 }
 
 // ===== Score Global hero KPI =====
-function ScoreGlobalCard({ score }) {
+function ScoreGlobalCard({ score, deptCount }) {
   // Animated ring value
   const [shown, setShown] = useState(0);
   useEffect(() => {
@@ -215,8 +232,8 @@ function ScoreGlobalCard({ score }) {
         <div>
           <div className="kpi__value" style={{margin: 0, fontSize: 30}}>{shown}%</div>
           <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Performance global</div>
-          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 11, marginTop: 4, opacity: 0.95}}>
-            <Icon name="up" size={10}/> +3.2 vs mes anterior
+          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 11, marginTop: 4, opacity: 0.85}}>
+            Promedio({deptCount || 12} deptos) · KPIs Q2 2026
           </div>
         </div>
       </div>
