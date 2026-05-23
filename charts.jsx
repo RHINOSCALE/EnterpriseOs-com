@@ -266,6 +266,7 @@ function GaugeChart({ value, target = 100, size = 180, label, unit = "%" }) {
 
 // ===== Radar chart =====
 function RadarChart({ axes, series, size = 260 }) {
+  const [tip, setTip] = useState(null);
   const cx = size/2, cy = size/2;
   const r = size/2 - 28;
   const n = axes.length;
@@ -273,7 +274,7 @@ function RadarChart({ axes, series, size = 260 }) {
   const point = (i, v) => [cx + Math.cos(angle(i)) * r * v, cy + Math.sin(angle(i)) * r * v];
 
   return (
-    <svg width={size} height={size}>
+    <svg width={size} height={size} onMouseLeave={() => setTip(null)}>
       {[0.25, 0.5, 0.75, 1].map((p, i) => (
         <polygon key={i}
           points={axes.map((_, ax) => point(ax, p).join(",")).join(" ")}
@@ -301,10 +302,40 @@ function RadarChart({ axes, series, size = 260 }) {
           />
           {s.data.map((v, i) => {
             const [x, y] = point(i, v);
-            return <circle key={i} cx={x} cy={y} r="2.5" fill={s.color} className="chart-dot" style={{transformOrigin: `${x}px ${y}px`, animationDelay: (0.6 + i*0.05) + "s"}}/>;
+            return (
+              <circle key={i} cx={x} cy={y}
+                r={tip?.i === i && tip?.si === si ? 5 : 3}
+                fill={s.color} stroke="var(--panel)" strokeWidth="1.5"
+                className="chart-dot"
+                style={{cursor: "pointer", transformOrigin: `${x}px ${y}px`, animationDelay: (0.6 + i*0.05) + "s", transition: "r .1s"}}
+                onMouseEnter={() => setTip({ i, si, x, y, label: axes[i], value: v, color: s.color })}
+              />
+            );
           })}
         </g>
       ))}
+      {tip && (() => {
+        const label = tip.label;
+        const pct = Math.round(tip.value * 100);
+        const text = `${label}: ${pct}%`;
+        const tw = text.length * 6.2 + 16;
+        const th = 20;
+        let tx = tip.x - tw / 2;
+        let ty = tip.y - 28;
+        if (tx < 4) tx = 4;
+        if (tx + tw > size - 4) tx = size - tw - 4;
+        if (ty < 4) ty = tip.y + 12;
+        return (
+          <g style={{pointerEvents: "none"}}>
+            <rect x={tx} y={ty} width={tw} height={th} rx="5"
+              fill="var(--panel)" stroke={tip.color} strokeWidth="1"
+              style={{filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.18))"}}/>
+            <text x={tx + tw/2} y={ty + 13.5} textAnchor="middle"
+              fontSize="10.5" fontWeight="600" fill={tip.color}
+              fontFamily="var(--ff-mono)">{text}</text>
+          </g>
+        );
+      })()}
     </svg>
   );
 }
