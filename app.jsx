@@ -247,7 +247,7 @@ function App() {
       {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} projects={projects} tasks={tasks} poa={poa} departments={departments} addAudit={addAudit} showToast={showToast} setView={setView}/>}
       {effView === "kpis" && <KPIPage session={session} deptScope={deptScope} setDeptScope={setDeptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} addAudit={addAudit} showToast={showToast}/>}
       {effView === "projects" && <ProjectsPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} addAudit={addAudit} showToast={showToast}/>}
-      {effView === "tasks" && <TasksPage session={session} deptScope={deptScope} tasks={tasks} setTasks={setTasks} projects={projects} addAudit={addAudit} showToast={showToast}/>}
+      {effView === "tasks" && <TasksPage session={session} deptScope={deptScope} tasks={tasks} setTasks={setTasks} projects={projects} users={users} addAudit={addAudit} showToast={showToast}/>}
       {effView === "poa" && <POAPage session={session} deptScope={deptScope} poa={poa} setPoa={setPoa} kpis={kpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} addAudit={addAudit} showToast={showToast}/>}
       {effView === "calendar" && <CalendarPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} events={events} setEvents={setEvents} addAudit={addAudit} showToast={showToast}/>}
       {effView === "files" && <FilesPage session={session} deptScope={deptScope} files={files} setFiles={setFiles} addAudit={addAudit} showToast={showToast}/>}

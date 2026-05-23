@@ -14,7 +14,14 @@ const TASK_PRIO = {
   critical: { label: "Crítica",  color: "#7c2d12",         cls: "prio--high" },
 };
 
-function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, showToast }) {
+function assigneeDisplay(assignedTo, users) {
+  if (!assignedTo) return "—";
+  const u = users?.[assignedTo.toLowerCase()];
+  if (u) return initials(u.name || u.email);
+  return assignedTo;
+}
+
+function TasksPage({ session, deptScope, tasks, setTasks, projects, users, addAudit, showToast }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const readOnly = role === "viewer";
@@ -200,7 +207,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
                           <span className={"prio " + TASK_PRIO[t.priority]?.cls}/> <span style={{textTransform: "capitalize"}}>{TASK_PRIO[t.priority]?.label}</span>
                           <span style={{marginLeft: 6}} className="mono dim" style={{color: isOverdue ? "var(--danger)" : "var(--text-3)", fontFamily: "var(--ff-mono)", fontSize: 11}}>· {t.due_date.slice(5)}</span>
                           <div className="kcard__avs">
-                            <span className="avi">{t.assigned_to}</span>
+                            <span className="avi">{assigneeDisplay(t.assigned_to, users)}</span>
                           </div>
                         </div>
                       </div>
@@ -229,7 +236,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
                     <td className="dim" onClick={() => setOpen(t)}>{D.DEPT_BY_ID[t.department]?.name}</td>
                     <td onClick={() => setOpen(t)}><span className={"chip " + st.chip}><span className="dot"/>{st.label}</span></td>
                     <td onClick={() => setOpen(t)}><span className={"prio " + TASK_PRIO[t.priority]?.cls}/> <span style={{marginLeft: 6, fontSize: 12}}>{TASK_PRIO[t.priority]?.label}</span></td>
-                    <td onClick={() => setOpen(t)}><span className="avi" style={{width: 22, height: 22, borderRadius: "50%", background: "var(--accent-soft)", color: "var(--accent)", display: "inline-grid", placeItems: "center", fontSize: 10, fontFamily: "var(--ff-mono)", fontWeight: 600}}>{t.assigned_to}</span></td>
+                    <td onClick={() => setOpen(t)}><span className="avi" style={{width: 22, height: 22, borderRadius: "50%", background: "var(--accent-soft)", color: "var(--accent)", display: "inline-grid", placeItems: "center", fontSize: 10, fontFamily: "var(--ff-mono)", fontWeight: 600}}>{assigneeDisplay(t.assigned_to, users)}</span></td>
                     <td className="mono dim" style={{fontSize: 12}} onClick={() => setOpen(t)}>{t.due_date}</td>
                     <td onClick={() => setOpen(t)}>{checks > 0 ? <span className="chip" style={{fontSize: 11}}>{done}/{checks}</span> : <span className="dim">—</span>}</td>
                     <td>{!readOnly && <button className="btn btn--sm btn--danger" onClick={() => setDeleteId(t.id)}><Icon name="x" size={12}/></button>}</td>
@@ -243,11 +250,11 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
       )}
 
       {view === "mine" && (
-        <Card title={`Asignadas a ${initials(session.name)}`} sub="incluye iniciales coincidentes">
+        <Card title={`Asignadas a mí`} sub={session.name}>
           <table className="table">
             <thead><tr><th>Título</th><th>Depto</th><th>Estado</th><th>Prio</th><th>Fecha</th><th>Checklist</th></tr></thead>
             <tbody>
-              {filtered.filter(t => t.assigned_to === initials(session.name)).map(t => {
+              {filtered.filter(t => t.assigned_to === session.email?.toLowerCase() || t.assigned_to === initials(session.name)).map(t => {
                 const checks = t.checklist.length;
                 const done = t.checklist.filter(c => c.done).length;
                 const st = TASK_STATUS.find(s => s.id === t.status);
@@ -262,14 +269,14 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
                   </tr>
                 );
               })}
-              {filtered.filter(t => t.assigned_to === initials(session.name)).length === 0 &&
-                <tr><td colSpan={6} className="dim" style={{textAlign: "center", padding: 24}}>No tienes tareas asignadas con tus iniciales ({initials(session.name)}).</td></tr>}
+              {filtered.filter(t => t.assigned_to === session.email?.toLowerCase() || t.assigned_to === initials(session.name)).length === 0 &&
+                <tr><td colSpan={6} className="dim" style={{textAlign: "center", padding: 24}}>No tienes tareas asignadas.</td></tr>}
             </tbody>
           </table>
         </Card>
       )}
 
-      {open && <TaskModal t={open} projects={projects} readOnly={readOnly} onClose={() => setOpen(null)}
+      {open && <TaskModal t={open} projects={projects} users={users} readOnly={readOnly} onClose={() => setOpen(null)}
         onSave={(patch) => { if (readOnly) return; updateTask(open.id, patch); setOpen({...open, ...patch}); }}
         onToggle={(cid) => {
           if (readOnly) return;
@@ -287,7 +294,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
         onRemoveCheck={(cid) => { if (readOnly) return; removeChecklist(open.id, cid); setOpen(prev => ({...prev, checklist: prev.checklist.filter(c => c.id !== cid)})); }}
         onDelete={() => { setDeleteId(open.id); setOpen(null); }}/>}
 
-      {adding && <NewTaskModal session={session} effDept={effDept} projects={projects} onClose={() => setAdding(false)} onCreate={createTask}/>}
+      {adding && <NewTaskModal session={session} effDept={effDept} projects={projects} users={users} onClose={() => setAdding(false)} onCreate={createTask}/>}
 
       {deleteId && (
         <div className="modal-bg" onClick={() => setDeleteId(null)}>
@@ -305,7 +312,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
   );
 }
 
-function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemoveCheck, onDelete, readOnly }) {
+function TaskModal({ t, projects, users, onClose, onSave, onToggle, onAddCheck, onRemoveCheck, onDelete, readOnly }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState(t.title);
   const [desc, setDesc] = useState(t.description || "");
@@ -372,8 +379,13 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
             </div>
           </div>
           <div className="field">
-            <label>Asignada a (iniciales)</label>
-            <input className="input mono" maxLength={3} style={{textTransform: "uppercase", maxWidth: 100}} value={assignee} onChange={e => setAssignee(e.target.value.toUpperCase())} onBlur={() => onSave({ assigned_to: assignee })} disabled={readOnly}/>
+            <label>Asignada a</label>
+            <select className="select" value={assignee} onChange={e => { setAssignee(e.target.value); onSave({ assigned_to: e.target.value }); }} disabled={readOnly}>
+              <option value="">— sin asignar —</option>
+              {Object.values(users || {}).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
+                <option key={u.email} value={u.email.toLowerCase()}>{u.name || u.email}</option>
+              ))}
+            </select>
           </div>
           <div className="divider"/>
           <div className="flex-c gap-10" style={{justifyContent: "space-between", marginBottom: 10}}>
@@ -408,7 +420,7 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
   );
 }
 
-function NewTaskModal({ session, effDept, projects, onClose, onCreate }) {
+function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -417,7 +429,7 @@ function NewTaskModal({ session, effDept, projects, onClose, onCreate }) {
   const [prio, setPrio] = useState("medium");
   const [status, setStatus] = useState("pending");
   const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
-  const [assignee, setAssignee] = useState(initials(session.name));
+  const [assignee, setAssignee] = useState(session.email?.toLowerCase() || "");
 
   const projOptions = projects[dept] || [];
 
@@ -466,7 +478,15 @@ function NewTaskModal({ session, effDept, projects, onClose, onCreate }) {
             </div>
             <div className="field"><label>Fecha límite</label><input className="input mono" type="date" value={due} onChange={e => setDue(e.target.value)}/></div>
           </div>
-          <div className="field"><label>Asignada a (iniciales)</label><input className="input mono" maxLength={3} style={{textTransform: "uppercase", maxWidth: 100}} value={assignee} onChange={e => setAssignee(e.target.value.toUpperCase())}/></div>
+          <div className="field">
+            <label>Asignada a</label>
+            <select className="select" value={assignee} onChange={e => setAssignee(e.target.value)}>
+              <option value="">— sin asignar —</option>
+              {Object.values(users || {}).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
+                <option key={u.email} value={u.email.toLowerCase()}>{u.name || u.email}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="modal__ft">
           <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>

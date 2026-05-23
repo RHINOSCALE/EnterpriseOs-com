@@ -198,7 +198,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
               <span style={{fontSize: 11, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600}}>{D.DEPT_BY_ID[deptId]?.name || deptId}</span>
               <span className="dim" style={{fontSize: 11}}>· {goals.length} {goals.length === 1 ? "meta" : "metas"}</span>
             </div>
-            {goals.map(g => {
+            {[...goals].sort((a, b) => (b.type === "bhag" ? 1 : 0) - (a.type === "bhag" ? 1 : 0)).map(g => {
               const isBhag = g.type === "bhag";
               const linkedProjects = (g.linked_projects || []).map(id => allProjectsFlat.find(p => p.id === id)).filter(Boolean);
               const linkedKpis = (g.linked_kpis || []).map(ref => {
@@ -390,9 +390,9 @@ function ProjectPickerModal({ deptId, goalId, projects, tasks, currentGoal, onLi
   const alreadyLinked = currentGoal?.linked_projects || [];
   const SC = (s) => ({done:"var(--positive)",doing:"var(--accent)",review:"var(--warning)",todo:"var(--text-3)",backlog:"var(--text-3)"}[s]||"var(--text-3)");
 
-  const displayed = Object.values(projects||{}).flat().filter(p =>
+  const displayed = (projects?.[deptId] || []).filter(p =>
     !alreadyLinked.includes(p.id) &&
-    (p.title.toLowerCase().includes(search.toLowerCase()) || (D.DEPT_BY_ID[p.dept]?.name||"").toLowerCase().includes(search.toLowerCase()))
+    p.title.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -441,7 +441,7 @@ function KpiPickerModal({ deptId, goalId, kpiWeekly, curYear, curQuarter, curren
 
   const allKpis = [];
   const sorted = Object.entries(kpiWeekly||{})
-    .filter(([k]) => k.includes("_"+curYear+"_"))
+    .filter(([k]) => k.startsWith(deptId + "_") && k.includes("_"+curYear+"_"))
     .sort((a,b) => b[0].localeCompare(a[0]));
   const seen = new Set();
   for (const [key, list] of sorted) {
@@ -459,8 +459,7 @@ function KpiPickerModal({ deptId, goalId, kpiWeekly, curYear, curQuarter, curren
   }
 
   const displayed = allKpis.filter(k =>
-    k.item.label.toLowerCase().includes(search.toLowerCase()) ||
-    (k.deptObj?.name||"").toLowerCase().includes(search.toLowerCase())
+    k.item.label.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
