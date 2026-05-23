@@ -158,7 +158,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
   const deptScores = useMemo(() => {
     const deptList = departments && departments.length > 0 ? departments : D.DEPARTMENTS;
     return deptList.map(d => {
-      const score = computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, selYear, selQuarter);
+      const score = computeProjectScore(d.id, projects, tasks);
       const key = `${d.id}_${selYear}_${selQuarter}`;
       const weeklyList = (kpiWeekly || {})[key] || [];
       let critical;
