@@ -186,6 +186,7 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
   const [quarter, setQuarter] = useState(() => Math.ceil((new Date().getMonth() + 1) / 3));
   const [addingKpi, setAddingKpi] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deptPickerOpen, setDeptPickerOpen] = useState(false);
 
   const Q_LABELS = ["1ER", "2DO", "3ER", "4TO"];
   const WEEKS = Array.from({ length: 13 }, (_, i) => `S${i + 1}`);
@@ -306,10 +307,27 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
           </div>
           {readOnly && <span className="chip"><Icon name="lock" size={11} /> Solo lectura</span>}
           {!readOnly && (
-            <button className="btn btn--primary"
-              onClick={() => setAddingKpi(effDept || deptGroups[0]?.id || "ope")}>
-              <Icon name="plus" size={14} /> Agregar KPI
-            </button>
+            <div style={{position: "relative"}}>
+              <button className="btn btn--primary"
+                onClick={() => effDept ? setAddingKpi(effDept) : setDeptPickerOpen(o => !o)}>
+                <Icon name="plus" size={14} /> Agregar KPI
+              </button>
+              {deptPickerOpen && !effDept && (
+                <div style={{position: "absolute", right: 0, top: "calc(100% + 6px)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 8, zIndex: 50, minWidth: 200, boxShadow: "var(--shadow-2)", display: "grid", gap: 2}}>
+                  <div style={{fontSize: 11, color: "var(--text-3)", padding: "4px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em"}}>Seleccionar departamento</div>
+                  {deptGroups.map(d => (
+                    <div key={d.id} onClick={() => { setDeptPickerOpen(false); setAddingKpi(d.id); }}
+                      style={{display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 6, cursor: "pointer", fontSize: 13}}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-1)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <span style={{width: 8, height: 8, borderRadius: 2, background: d.color, flexShrink: 0}}/>
+                      <span>{d.name}</span>
+                      <span className="mono" style={{marginLeft: "auto", fontSize: 10, color: "var(--text-3)"}}>{d.short}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
