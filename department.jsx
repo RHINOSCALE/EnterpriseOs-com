@@ -2,13 +2,16 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 // ===== Departments overview =====
-function Departments({ session, kpis, projects, departments, setDepartments, setView, setDeptScope, showToast, addAudit }) {
+function Departments({ session, kpis, kpiWeekly, projects, tasks, poa, departments, setDepartments, setView, setDeptScope, showToast, addAudit }) {
   const D = window.INDISA_DATA;
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showFilter, setShowFilter] = useState(false);
   const [addingDept, setAddingDept] = useState(false);
   const [deleteDept, setDeleteDept] = useState(null);
+  const _scoreNow = new Date();
+  const _scoreYear = _scoreNow.getFullYear();
+  const _scoreQuarter = Math.ceil((_scoreNow.getMonth() + 1) / 3);
 
   function handleAddDept(name, short, color) {
     const id = short.toLowerCase().slice(0, 4);
@@ -31,8 +34,7 @@ function Departments({ session, kpis, projects, departments, setDepartments, set
   }
 
   const displayed = departments.filter(d => {
-    const list = kpis[d.id] || [];
-    const score = list.length ? Math.min(100, Math.round(list.reduce((s,k) => s + Math.min(1.0, k.value/k.target), 0) / list.length * 100)) : 60;
+    const score = window.computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, _scoreYear, _scoreQuarter);
     const matchSearch = d.name.toLowerCase().includes(search.toLowerCase()) || d.short.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" || (filterStatus === "ok" && score >= 85) || (filterStatus === "warn" && score >= 70 && score < 85) || (filterStatus === "risk" && score < 70);
     return matchSearch && matchStatus;
@@ -72,8 +74,7 @@ function Departments({ session, kpis, projects, departments, setDepartments, set
 
       <div className="row row--3">
         {displayed.map(d => {
-          const list = kpis[d.id] || [];
-          const score = list.length ? Math.min(100, Math.round(list.reduce((s,k) => s + Math.min(1.0, k.value/k.target), 0) / list.length * 100)) : 60;
+          const score = window.computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, _scoreYear, _scoreQuarter);
           const open = (projects[d.id] || []).filter(p => p.status !== "done").length;
           const barColor = score >= 85 ? "var(--positive)" : score >= 70 ? "var(--warning)" : "var(--danger)";
           const statusLbl = score >= 85 ? "Óptimo" : score >= 70 ? "Regular" : "En Riesgo";

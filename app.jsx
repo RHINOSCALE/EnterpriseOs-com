@@ -244,14 +244,14 @@ function App() {
       searchData={{ kpis, projects, tasks, users, poa, files }}
       audit={audit}
     >
-      {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} projects={projects} addAudit={addAudit} showToast={showToast} setView={setView}/>}
+      {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} poa={poa} addAudit={addAudit} showToast={showToast} setView={setView}/>}
       {effView === "kpis" && <KPIPage session={session} deptScope={deptScope} setDeptScope={setDeptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} addAudit={addAudit} showToast={showToast}/>}
       {effView === "projects" && <ProjectsPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} addAudit={addAudit} showToast={showToast}/>}
       {effView === "tasks" && <TasksPage session={session} deptScope={deptScope} tasks={tasks} setTasks={setTasks} projects={projects} addAudit={addAudit} showToast={showToast}/>}
       {effView === "poa" && <POAPage session={session} deptScope={deptScope} poa={poa} setPoa={setPoa} addAudit={addAudit} showToast={showToast}/>}
       {effView === "calendar" && <CalendarPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} events={events} setEvents={setEvents} addAudit={addAudit} showToast={showToast}/>}
       {effView === "files" && <FilesPage session={session} deptScope={deptScope} files={files} setFiles={setFiles} addAudit={addAudit} showToast={showToast}/>}
-      {effView === "departments" && <Departments session={session} kpis={kpis} projects={projects} departments={departments} setDepartments={setDepartments} setView={setView} setDeptScope={setDeptScope} showToast={showToast} addAudit={addAudit}/>}
+      {effView === "departments" && <Departments session={session} kpis={kpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} poa={poa} departments={departments} setDepartments={setDepartments} setView={setView} setDeptScope={setDeptScope} showToast={showToast} addAudit={addAudit}/>}
       {effView === "org" && <OrgChart session={session} users={users} onSelectDept={(d) => { if (role === "owner") setDeptScope(d); }}/>}
       {effView === "codes" && <CodesPage session={session} codes={codes} setCodes={setCodes} addAudit={addAudit} showToast={showToast}/>}
       {effView === "audit" && <AuditPage session={session} audit={audit}/>}

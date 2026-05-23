@@ -4,7 +4,68 @@ const { useState, useEffect, useMemo, useRef } = React;
 const MONTH_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MONTH_SHORT_ES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
-function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, addAudit, showToast, setView }) {
+// Weighted multi-factor department performance score
+// KPIs 50% · Projects 25% · Tasks 15% · POA 10%
+// Weights are redistributed proportionally when a component has no data.
+function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter) {
+  // KPI score — 50%
+  let kpiScore = null;
+  const key = `${deptId}_${curYear}_${curQuarter}`;
+  const weeklyList = (kpiWeekly || {})[key] || [];
+  if (weeklyList.length > 0) {
+    const ratios = weeklyList.flatMap(k => {
+      const filled = k.semanas.filter(v => v !== null && v !== undefined);
+      const last = filled.length ? filled[filled.length - 1] : null;
+      return last !== null && k.metaSemanal > 0 ? [Math.min(1, last / k.metaSemanal)] : [];
+    });
+    if (ratios.length > 0) kpiScore = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  }
+  if (kpiScore === null) {
+    const list = kpis[deptId] || [];
+    if (list.length > 0)
+      kpiScore = list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length;
+  }
+
+  // Project score — 25%
+  let projectScore = null;
+  const deptProjects = projects[deptId] || [];
+  if (deptProjects.length > 0) {
+    projectScore = deptProjects.filter(p => p.status === "done").length / deptProjects.length;
+  }
+
+  // Task score — 15%
+  let taskScore = null;
+  if (tasks && deptProjects.length > 0) {
+    const pids = new Set(deptProjects.map(p => p.id));
+    const deptTasks = tasks.filter(t => pids.has(t.project_id));
+    if (deptTasks.length > 0)
+      taskScore = deptTasks.filter(t => t.status === "completed").length / deptTasks.length;
+  }
+
+  // POA score — 10%
+  let poaScore = null;
+  if (poa && poa.length > 0) {
+    const deptPoa = poa.filter(g =>
+      (g.deptIds && g.deptIds.includes(deptId)) || g.dept === deptId
+    );
+    if (deptPoa.length > 0)
+      poaScore = deptPoa.filter(g => g.status === "done" || g.status === "completed").length / deptPoa.length;
+  }
+
+  // Weighted average — redistribute weights among components that have real data
+  const components = [
+    { score: kpiScore,     weight: 0.50 },
+    { score: projectScore, weight: 0.25 },
+    { score: taskScore,    weight: 0.15 },
+    { score: poaScore,     weight: 0.10 },
+  ];
+  const active = components.filter(c => c.score !== null);
+  if (active.length === 0) return 0;
+  const totalW = active.reduce((s, c) => s + c.weight, 0);
+  return Math.min(100, Math.round(active.reduce((s, c) => s + c.score * (c.weight / totalW), 0) * 100));
+}
+
+function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tasks, poa, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const effDept = role === "owner" ? deptScope : session.dept;
@@ -45,34 +106,29 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
     showToast(`Reporte ${period} descargado`);
   }
 
-  // Compute department health scores from kpiWeekly (current quarter) with fallback to legacy kpis
+  // Compute department health scores using the weighted multi-factor formula
   const deptScores = useMemo(() => {
     return D.DEPARTMENTS.map(d => {
+      const score = computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter);
+      // Critical KPI count (separate from score — used for display only)
       const key = `${d.id}_${curYear}_${curQuarter}`;
       const weeklyList = (kpiWeekly || {})[key] || [];
-      let score, critical;
+      let critical;
       if (weeklyList.length > 0) {
-        const ratios = weeklyList.map(k => {
-          const filled = k.semanas.filter(v => v !== null && v !== undefined);
-          const last = filled.length ? filled[filled.length - 1] : null;
-          return last !== null && k.metaSemanal > 0 ? Math.min(1, last / k.metaSemanal) : null;
-        }).filter(r => r !== null);
-        score = ratios.length ? Math.min(100, Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 100)) : 60;
         critical = weeklyList.filter(k => {
           const filled = k.semanas.filter(v => v !== null && v !== undefined);
           const last = filled.length ? filled[filled.length - 1] : null;
           return last !== null && k.metaSemanal > 0 && last / k.metaSemanal < 0.5;
         }).length;
       } else {
-        const list = kpis[d.id] || [];
-        score = list.length ? Math.min(100, Math.round(list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length * 100)) : 60;
-        critical = list.filter(k => k.value / k.target < 0.5).length;
+        critical = (kpis[d.id] || []).filter(k => k.value / k.target < 0.5).length;
       }
       const open = (projects[d.id] || []).filter(p => p.status !== "done").length;
-      const tasks = (projects[d.id] || []).length * 6 + Math.floor(d.color.charCodeAt(0) % 15);
-      return { ...d, score, open, tasks, critical };
+      const pids = new Set((projects[d.id] || []).map(p => p.id));
+      const taskCount = (tasks || []).filter(t => pids.has(t.project_id)).length;
+      return { ...d, score, open, tasks: taskCount, critical };
     });
-  }, [kpis, kpiWeekly, projects]);
+  }, [kpis, kpiWeekly, projects, tasks, poa]);
 
   const atRisk = deptScores.filter(d => d.score < 75);
 
@@ -103,7 +159,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, add
 
   // === Render: Dept-scoped (drilled into a department) ===
   if (effDept) {
-    return <DeptDashboard dept={D.DEPT_BY_ID[effDept]} kpis={kpis} setKpis={setKpis} projects={projects} session={session} addAudit={addAudit} showToast={showToast} setView={setView}/>;
+    return <DeptDashboard dept={D.DEPT_BY_ID[effDept]} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} poa={poa} session={session} addAudit={addAudit} showToast={showToast} setView={setView}/>;
   }
 
   // === Render: Executive overview (Owner all-departments) ===
@@ -296,12 +352,13 @@ function DeptPerfRow({ d, onClick }) {
 }
 
 // ===== Department-scoped dashboard =====
-function DeptDashboard({ dept, kpis, setKpis, projects, session, addAudit, showToast, setView }) {
+function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, projects, tasks, poa, session, addAudit, showToast, setView }) {
   const readOnly = session.role === "viewer";
   const PALETTE = ["var(--accent)","var(--positive)","var(--warning)","#8b5cf6","#0ea5e9","#ec4899","#14b8a6","#f97316","#ef4444","#6366f1"];
   const list = kpis[dept.id] || [];
   const ps = projects[dept.id] || [];
-  const score = list.length ? Math.min(100, Math.round(list.reduce((s,k) => s + Math.min(1.0, k.value/k.target), 0) / list.length * 100)) : 60;
+  const _now = new Date();
+  const score = computeDeptScore(dept.id, kpis, kpiWeekly, projects, tasks, poa, _now.getFullYear(), Math.ceil((_now.getMonth() + 1) / 3));
 
   function updateKpi(id, field, value) {
     setKpis(prev => {
@@ -455,4 +512,4 @@ function Avatars({ list }) {
   );
 }
 
-Object.assign(window, { Dashboard, Card, MetricCard, DeptPerfRow, StatusChip, Avatars, ScoreGlobalCard });
+Object.assign(window, { Dashboard, Card, MetricCard, DeptPerfRow, StatusChip, Avatars, ScoreGlobalCard, computeDeptScore });
