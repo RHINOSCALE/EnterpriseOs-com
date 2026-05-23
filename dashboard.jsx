@@ -24,22 +24,18 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   // No legacy fallback — if no weekly KPI data exists, kpiScore stays null
   // and its 50% weight is redistributed to the other components.
 
-  // Project score — 25%: status-weighted progress (not binary done/not-done)
+  // Project score — 25%: completed / total (binary)
   let projectScore = null;
   const deptProjects = projects[deptId] || [];
-  if (deptProjects.length > 0) {
-    const PW = { done: 1.0, review: 0.75, doing: 0.5, todo: 0.25, backlog: 0.0 };
-    projectScore = deptProjects.reduce((s, p) => s + (PW[p.status] ?? 0.5), 0) / deptProjects.length;
-  }
+  if (deptProjects.length > 0)
+    projectScore = deptProjects.filter(p => p.status === "done").length / deptProjects.length;
 
-  // Task score — 15%: status-weighted, using department field (not just project_id)
+  // Task score — 15%: completed / total (binary)
   let taskScore = null;
   if (tasks) {
     const deptTasks = tasks.filter(t => t.department === deptId);
-    if (deptTasks.length > 0) {
-      const TW = { completed: 1.0, in_progress: 0.5, pending: 0.1, blocked: 0.0 };
-      taskScore = deptTasks.reduce((s, t) => s + (TW[t.status] ?? 0.1), 0) / deptTasks.length;
-    }
+    if (deptTasks.length > 0)
+      taskScore = deptTasks.filter(t => t.status === "completed").length / deptTasks.length;
   }
 
   // POA score — 10%
@@ -78,17 +74,16 @@ function computeKpiScore(deptId, kpis, kpiWeekly, curYear, curQuarter) {
   return 0;
 }
 
-// Projects+Tasks score (0-100): status-weighted progress
+// Projects+Tasks score (0-100): done/total for projects, completed/total for tasks
 function computeProjectScore(deptId, projects, tasks) {
   const deptProjects = projects[deptId] || [];
-  if (!deptProjects.length) return 0;
-  const PW = { done: 1.0, review: 0.75, doing: 0.5, todo: 0.25, backlog: 0.0 };
-  const projRatio = deptProjects.reduce((s, p) => s + (PW[p.status] ?? 0.5), 0) / deptProjects.length;
   const deptTasks = (tasks || []).filter(t => t.department === deptId);
-  if (!deptTasks.length) return Math.min(100, Math.round(projRatio * 100));
-  const TW = { completed: 1.0, in_progress: 0.5, pending: 0.1, blocked: 0.0 };
-  const taskRatio = deptTasks.reduce((s, t) => s + (TW[t.status] ?? 0.1), 0) / deptTasks.length;
-  return Math.min(100, Math.round((projRatio * 0.625 + taskRatio * 0.375) * 100));
+  const projPct = deptProjects.length ? deptProjects.filter(p => p.status === "done").length / deptProjects.length : null;
+  const taskPct = deptTasks.length ? deptTasks.filter(t => t.status === "completed").length / deptTasks.length : null;
+  if (projPct === null && taskPct === null) return 0;
+  if (projPct === null) return Math.round(taskPct * 100);
+  if (taskPct === null) return Math.round(projPct * 100);
+  return Math.round((projPct * 0.6 + taskPct * 0.4) * 100);
 }
 
 // Company-wide score: simple average of all department scores
