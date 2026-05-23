@@ -49,6 +49,31 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
     });
   }, [projects]);
 
+  // Auto-carry-forward: incomplete goals move to next quarter when quarter changes
+  useEffect(() => {
+    const lastKey = "indisa_poa_last_qtr";
+    const now = `${curYear}_${curQuarter}`;
+    const last = localStorage.getItem(lastKey);
+    if (last && last !== now) {
+      const [lastYear, lastQ] = last.split("_").map(Number);
+      setPoa(prev => {
+        let changed = false;
+        const out = {};
+        for (const [did, goals] of Object.entries(prev)) {
+          out[did] = (goals || []).map(g => {
+            if (g.progress < 100 && g.quarter === lastQ && g.year === lastYear) {
+              changed = true;
+              return { ...g, quarter: curQuarter, year: curYear, carriedFrom: `Q${lastQ} ${lastYear}` };
+            }
+            return g;
+          });
+        }
+        return changed ? out : prev;
+      });
+    }
+    localStorage.setItem(lastKey, now);
+  }, [curYear, curQuarter]);
+
   function editGoalTitle(deptId, goalId, title) {
     setPoa(prev => {
       const out = { ...prev };
@@ -77,6 +102,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
         out[deptId] = [...(out[deptId] || []), {
           id, type: type || "quarterly", title, owner: session.name, progress: 0,
           linked_projects: [], linked_kpis: [],
+          quarter: curQuarter, year: curYear,
         }];
       });
       return out;
@@ -255,6 +281,9 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
                     <input className="cell-edit" style={{fontSize:15,fontWeight:600,flex:1,padding:"4px 6px"}}
                       defaultValue={g.title} onBlur={e => editGoalTitle(deptId, g.id, e.target.value)} disabled={readOnly}/>
                     <span className="goal__owner">{g.owner}</span>
+                    {g.carriedFrom && (
+                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:999,background:"#fef9c3",color:"#854d0e",border:"1px solid #fde047",fontWeight:600,whiteSpace:"nowrap"}}>↩ {g.carriedFrom}</span>
+                    )}
                     <span className="goal__prog">{g.progress}%</span>
                     {!readOnly && <button className="btn btn--sm btn--danger" style={{marginLeft:8}} onClick={() => setDeleteGoal({deptId,goalId:g.id})} title="Eliminar meta"><Icon name="x" size={12}/></button>}
                   </div>

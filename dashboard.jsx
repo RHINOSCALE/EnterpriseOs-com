@@ -767,8 +767,12 @@ function Avatars({ list }) {
 }
 
 // Private per-user to-do list — stored in localStorage only, never synced to Supabase
+// Completed items are auto-deleted at midnight each day; pending items carry over.
 function PrivateTodoCard({ session }) {
   const storageKey = `indisa_todo_${session.email}`;
+  const lastClearKey = `${storageKey}_lastclear`;
+  const midnightRef = useRef(null);
+
   const [items, setItems] = useState(() => {
     try { return JSON.parse(localStorage.getItem(storageKey)) || []; } catch { return []; }
   });
@@ -785,6 +789,29 @@ function PrivateTodoCard({ session }) {
   }
   function toggle(id) { persist(items.map(it => it.id === id ? { ...it, done: !it.done } : it)); }
   function remove(id) { persist(items.filter(it => it.id !== id)); }
+
+  // Auto-clear completed items at midnight
+  useEffect(() => {
+    function clearDone() {
+      const today = new Date().toISOString().slice(0, 10);
+      setItems(prev => {
+        const next = prev.filter(it => !it.done);
+        try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
+      try { localStorage.setItem(lastClearKey, new Date().toISOString().slice(0, 10)); } catch {}
+    }
+    function scheduleMidnight() {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      midnightRef.current = setTimeout(() => { clearDone(); scheduleMidnight(); }, midnight - now);
+    }
+    // Clear on mount if last clear was a previous day
+    const today = new Date().toISOString().slice(0, 10);
+    try { if (localStorage.getItem(lastClearKey) !== today) clearDone(); } catch {}
+    scheduleMidnight();
+    return () => { if (midnightRef.current) clearTimeout(midnightRef.current); };
+  }, [storageKey, lastClearKey]);
 
   const pending = items.filter(it => !it.done).length;
 
