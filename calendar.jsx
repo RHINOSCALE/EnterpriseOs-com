@@ -20,7 +20,7 @@ function CalendarPage({ session, deptScope, projects, setProjects, tasks, setTas
   const readOnly = role === "viewer";
   const effDept = role === "owner" ? deptScope : session.dept;
 
-  const [cursor, setCursor] = useState({ year: 2026, month: 4 }); // May 2026
+  const [cursor, setCursor] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
   const [selDay, setSelDay] = useState(null);
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState({ kinds: Object.keys(EVENT_TYPES) });
@@ -67,7 +67,7 @@ function CalendarPage({ session, deptScope, projects, setProjects, tasks, setTas
 
   function nextMonth() { setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }); }
   function prevMonth() { setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }); }
-  function today() { setCursor({ year: 2026, month: 4 }); }
+  function today() { const n = new Date(); setCursor({ year: n.getFullYear(), month: n.getMonth() }); }
 
   function createEvent(data) {
     const id = "e" + Math.random().toString(36).slice(2,6);
@@ -161,7 +161,7 @@ function CalendarPage({ session, deptScope, projects, setProjects, tasks, setTas
         <div style={{display: "grid", gridTemplateColumns: "repeat(7, 1fr)"}}>
           {cells.map((d, i) => {
             const evs = eventsForDay(d);
-            const isToday = cursor.year === 2026 && cursor.month === 4 && d === 14;
+            const _now = new Date(); const isToday = cursor.year === _now.getFullYear() && cursor.month === _now.getMonth() && d === _now.getDate();
             const dateStr = d ? `${cursor.year}-${String(cursor.month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}` : null;
             return (
               <div key={i}
