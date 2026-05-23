@@ -1,7 +1,7 @@
 // POA — Plan Operativo Anual
 const { useState, useEffect, useMemo, useRef } = React;
 
-function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, tasks, addAudit, showToast }) {
+function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekly, projects, setProjects, tasks, addAudit, showToast }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const readOnly = role === "viewer";
@@ -13,8 +13,8 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
 
   const [addingGoal, setAddingGoal] = useState(false);
   const [deleteGoal, setDeleteGoal] = useState(null);
-  const [linkingProject, setLinkingProject] = useState(null);
-  const [linkingKpi, setLinkingKpi] = useState(null);
+  const [creatingProject, setCreatingProject] = useState(null);
+  const [creatingKpi, setCreatingKpi] = useState(null);
 
   // Auto-update goal progress from linked projects whenever projects change
   useEffect(() => {
@@ -75,15 +75,20 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
     setAddingGoal(false);
   }
 
-  function linkProject(deptId, goalId, projectId) {
+  function createAndLinkProject(deptId, goalId, projectData) {
+    const newId = "n" + Math.random().toString(36).slice(2, 6);
+    const np = { id: newId, ...projectData };
+    setProjects(prev => ({ ...prev, [deptId]: [...(prev[deptId] || []), np] }));
     setPoa(prev => {
       const out = { ...prev };
       out[deptId] = (out[deptId] || []).map(g =>
-        g.id !== goalId ? g : { ...g, linked_projects: [...new Set([...(g.linked_projects || []), projectId])] }
+        g.id !== goalId ? g : { ...g, linked_projects: [...new Set([...(g.linked_projects || []), newId])] }
       );
       return out;
     });
-    setLinkingProject(null);
+    addAudit({ action: `Proyecto creado y vinculado: ${projectData.title}`, user: session.name, dept: deptId, level: "success" });
+    showToast("Proyecto creado y vinculado a la meta");
+    setCreatingProject(null);
   }
 
   function unlinkProject(deptId, goalId, projectId) {
@@ -96,15 +101,20 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
     });
   }
 
-  function linkKpi(deptId, goalId, kpiRef) {
+  function createAndLinkKpi(deptId, goalId, kpiData) {
+    const k = `${deptId}_${curYear}_${curQuarter}`;
+    setKpiWeekly(prev => ({ ...prev, [k]: [...(prev[k] || []), kpiData] }));
+    const ref = `${deptId}:${kpiData.id}`;
     setPoa(prev => {
       const out = { ...prev };
       out[deptId] = (out[deptId] || []).map(g =>
-        g.id !== goalId ? g : { ...g, linked_kpis: [...new Set([...(g.linked_kpis || []), kpiRef])] }
+        g.id !== goalId ? g : { ...g, linked_kpis: [...new Set([...(g.linked_kpis || []), ref])] }
       );
       return out;
     });
-    setLinkingKpi(null);
+    addAudit({ action: `KPI creado y vinculado: ${kpiData.label}`, user: session.name, dept: deptId, level: "success" });
+    showToast("KPI creado y vinculado a la meta");
+    setCreatingKpi(null);
   }
 
   function unlinkKpi(deptId, goalId, kpiRef) {
@@ -244,8 +254,8 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
                       <div style={{marginBottom: 18}}>
                         <div className="flex-c gap-8" style={{marginBottom: 8}}>
                           <div className="dim" style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",fontWeight:500}}>Proyectos</div>
-                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setLinkingProject({deptId,goalId:g.id})}>
-                            <Icon name="plus" size={11}/> Vincular
+                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingProject({deptId,goalId:g.id})}>
+                            <Icon name="plus" size={11}/> Crear
                           </button>}
                         </div>
                         {linkedProjects.length === 0 ? (
@@ -275,8 +285,8 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
                       <div>
                         <div className="flex-c gap-8" style={{marginBottom: 8}}>
                           <div className="dim" style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",fontWeight:500}}>KPIs</div>
-                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setLinkingKpi({deptId,goalId:g.id})}>
-                            <Icon name="plus" size={11}/> Vincular
+                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingKpi({deptId,goalId:g.id})}>
+                            <Icon name="plus" size={11}/> Crear
                           </button>}
                         </div>
                         {linkedKpis.length === 0 ? (
@@ -348,23 +358,21 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
 
       {addingGoal && <NewGoalModal effDept={effDept} onClose={() => setAddingGoal(false)} onAdd={addGoal}/>}
 
-      {linkingProject && (
-        <ProjectPickerModal
-          deptId={linkingProject.deptId} goalId={linkingProject.goalId}
-          projects={projects} tasks={tasks}
-          currentGoal={(poa[linkingProject.deptId]||[]).find(g=>g.id===linkingProject.goalId)}
-          onLink={pid => linkProject(linkingProject.deptId,linkingProject.goalId,pid)}
-          onClose={() => setLinkingProject(null)}
+      {creatingProject && (
+        <NewProjectInPOAModal
+          session={session}
+          deptId={creatingProject.deptId}
+          onClose={() => setCreatingProject(null)}
+          onCreate={data => createAndLinkProject(creatingProject.deptId, creatingProject.goalId, data)}
         />
       )}
 
-      {linkingKpi && (
-        <KpiPickerModal
-          deptId={linkingKpi.deptId} goalId={linkingKpi.goalId}
-          kpiWeekly={kpiWeekly} curYear={curYear} curQuarter={curQuarter}
-          currentGoal={(poa[linkingKpi.deptId]||[]).find(g=>g.id===linkingKpi.goalId)}
-          onLink={ref => linkKpi(linkingKpi.deptId,linkingKpi.goalId,ref)}
-          onClose={() => setLinkingKpi(null)}
+      {creatingKpi && (
+        <NewKpiInPOAModal
+          deptId={creatingKpi.deptId}
+          curYear={curYear} curQuarter={curQuarter}
+          onClose={() => setCreatingKpi(null)}
+          onCreate={kpi => createAndLinkKpi(creatingKpi.deptId, creatingKpi.goalId, kpi)}
         />
       )}
 
@@ -384,119 +392,125 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, t
   );
 }
 
-function ProjectPickerModal({ deptId, goalId, projects, tasks, currentGoal, onLink, onClose }) {
+function NewProjectInPOAModal({ session, deptId, onClose, onCreate }) {
   const D = window.INDISA_DATA;
-  const [search, setSearch] = useState("");
-  const alreadyLinked = currentGoal?.linked_projects || [];
-  const SC = (s) => ({done:"var(--positive)",doing:"var(--accent)",review:"var(--warning)",todo:"var(--text-3)",backlog:"var(--text-3)"}[s]||"var(--text-3)");
+  const [title, setTitle] = useState("");
+  const [prio, setPrio] = useState("med");
+  const [status, setStatus] = useState("todo");
+  const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return d.toISOString().slice(0, 10); });
+  const [tag, setTag] = useState("");
+  const dept = D.DEPT_BY_ID[deptId];
 
-  const displayed = (projects?.[deptId] || []).filter(p =>
-    !alreadyLinked.includes(p.id) &&
-    p.title.toLowerCase().includes(search.toLowerCase())
-  );
+  function submit() {
+    if (!title.trim()) return;
+    onCreate({ title: title.trim(), dept: deptId, prio, status, due, tag: tag || "general", assignees: [initials(session.name)] });
+  }
 
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
-        <div className="modal__hd"><div className="modal__title">Vincular proyecto a la meta</div><button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button></div>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal__hd">
+          <div className="modal__title">Nuevo proyecto{dept ? ` · ${dept.name}` : ""}</div>
+          <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
+        </div>
         <div className="modal__bd">
-          <div className="tb__search" style={{marginBottom:10}}>
-            <Icon name="search" size={14}/>
-            <input placeholder="Buscar proyecto…" value={search} onChange={e=>setSearch(e.target.value)} autoFocus
-              style={{flex:1,background:"transparent",border:"none",outline:"none",fontSize:13}}/>
+          <div className="field"><label>Título del proyecto</label><input className="input" placeholder="Ej. Rediseño del portal web" value={title} onChange={e=>setTitle(e.target.value)} autoFocus/></div>
+          <div className="row row--2">
+            <div className="field">
+              <label>Etiqueta</label>
+              <input className="input" placeholder="Ej. diseño, ops" value={tag} onChange={e=>setTag(e.target.value)}/>
+            </div>
+            <div className="field">
+              <label>Fecha límite</label>
+              <input className="input mono" type="date" value={due} onChange={e=>setDue(e.target.value)}/>
+            </div>
           </div>
-          <div style={{maxHeight:320,overflowY:"auto",display:"grid",gap:6}}>
-            {displayed.length===0 ? (
-              <div style={{padding:16,textAlign:"center",color:"var(--text-3)",fontSize:13}}>No hay proyectos disponibles o ya están todos vinculados</div>
-            ) : displayed.map(proj => {
-              const pt = (tasks||[]).filter(t=>t.project_id===proj.id);
-              const pct = pt.length ? Math.round(pt.filter(t=>t.status==="completed").length/pt.length*100) : (proj.status==="done"?100:0);
-              const sC = SC(proj.status);
-              return (
-                <div key={proj.id} onClick={()=>onLink(proj.id)}
-                  style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:"1px solid var(--line)",display:"flex",alignItems:"center",gap:10,transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="var(--accent-soft)"}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:sC+"18",color:sC,fontWeight:600,textTransform:"uppercase",whiteSpace:"nowrap"}}>{proj.status}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:500,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{proj.title}</div>
-                    <div style={{fontSize:11,color:"var(--text-2)"}}>{D.DEPT_BY_ID[proj.dept]?.name||proj.dept} · {pct}% completado</div>
-                  </div>
-                  <Icon name="arrow" size={14}/>
-                </div>
-              );
-            })}
+          <div className="row row--2">
+            <div className="field">
+              <label>Estado inicial</label>
+              <select className="select" value={status} onChange={e=>setStatus(e.target.value)}>
+                <option value="todo">Por hacer</option>
+                <option value="doing">En curso</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Prioridad</label>
+              <select className="select" value={prio} onChange={e=>setPrio(e.target.value)}>
+                <option value="low">Baja</option>
+                <option value="med">Media</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div className="modal__ft"><button className="btn btn--ghost" onClick={onClose}>Cancelar</button></div>
+        <div className="modal__ft">
+          <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn--primary" disabled={!title.trim()} onClick={submit} style={{opacity:!title.trim()?0.5:1}}>
+            <Icon name="plus" size={14}/> Crear proyecto
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function KpiPickerModal({ deptId, goalId, kpiWeekly, curYear, curQuarter, currentGoal, onLink, onClose }) {
+function NewKpiInPOAModal({ deptId, curYear, curQuarter, onClose, onCreate }) {
   const D = window.INDISA_DATA;
-  const [search, setSearch] = useState("");
-  const alreadyLinked = currentGoal?.linked_kpis || [];
+  const dept = D.DEPT_BY_ID[deptId];
+  const [label, setLabel] = useState("");
+  const [tipo, setTipo] = useState("Cantidad");
+  const [meta, setMeta] = useState("");
+  const [acumPrev, setAcumPrev] = useState("");
+  const TIPOS = ["Cantidad", "Porcentaje", "Tiempo", "Moneda"];
+  const canSubmit = label.trim() && meta !== "" && !isNaN(parseFloat(meta));
 
-  const allKpis = [];
-  const sorted = Object.entries(kpiWeekly||{})
-    .filter(([k]) => k.startsWith(deptId + "_") && k.includes("_"+curYear+"_"))
-    .sort((a,b) => b[0].localeCompare(a[0]));
-  const seen = new Set();
-  for (const [key, list] of sorted) {
-    const [kDept] = key.split("_");
-    const deptObj = D.DEPT_BY_ID[kDept];
-    for (const item of (list||[])) {
-      const ref = `${kDept}:${item.id}`;
-      if (seen.has(ref) || alreadyLinked.includes(ref)) continue;
-      seen.add(ref);
-      const filled = item.semanas.filter(v=>v!==null&&v!==undefined);
-      const lastVal = filled.length ? filled[filled.length-1] : null;
-      const pct = lastVal!==null&&item.metaSemanal>0 ? Math.round(lastVal/item.metaSemanal*100) : null;
-      allKpis.push({ref,item,deptObj,lastVal,pct});
-    }
+  function submit() {
+    if (!canSubmit) return;
+    const id = (label.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"").slice(0,15)||"kpi") + "_" + Date.now().toString(36).slice(-4);
+    onCreate({ id, label: label.trim(), tipo, metaSemanal: parseFloat(meta), semanas: Array(13).fill(null), acumuladoPrevio: parseFloat(acumPrev)||0 });
   }
-
-  const displayed = allKpis.filter(k =>
-    k.item.label.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" style={{maxWidth:520}} onClick={e=>e.stopPropagation()}>
-        <div className="modal__hd"><div className="modal__title">Vincular KPI a la meta</div><button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button></div>
-        <div className="modal__bd">
-          <div className="tb__search" style={{marginBottom:10}}>
-            <Icon name="search" size={14}/>
-            <input placeholder="Buscar KPI…" value={search} onChange={e=>setSearch(e.target.value)} autoFocus
-              style={{flex:1,background:"transparent",border:"none",outline:"none",fontSize:13}}/>
-          </div>
-          <div style={{maxHeight:320,overflowY:"auto",display:"grid",gap:6}}>
-            {displayed.length===0 ? (
-              <div style={{padding:16,textAlign:"center",color:"var(--text-3)",fontSize:13}}>No hay KPIs disponibles. Agrega KPIs en el módulo de KPIs & Analytics primero.</div>
-            ) : displayed.map(({ref,item,deptObj,lastVal,pct}) => {
-              const kC = pct!==null?(pct>=100?"var(--positive)":pct>=80?"var(--warning)":"var(--danger)"):"var(--text-3)";
-              return (
-                <div key={ref} onClick={()=>onLink(ref)}
-                  style={{padding:"10px 12px",borderRadius:8,cursor:"pointer",border:"1px solid var(--line)",display:"flex",alignItems:"center",gap:10,transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="var(--accent-soft)"}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:500,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</div>
-                    <div style={{fontSize:11,color:"var(--text-2)"}}>{deptObj?.name||""} · Meta: {item.metaSemanal}/sem</div>
-                  </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:14,fontWeight:700,fontFamily:"var(--ff-mono)",color:kC}}>{lastVal!==null?lastVal:"—"}</div>
-                    {pct!==null&&<div style={{fontSize:10,color:kC}}>{pct}%</div>}
-                  </div>
-                  <Icon name="arrow" size={14}/>
-                </div>
-              );
-            })}
-          </div>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal__hd">
+          <div className="modal__title">Nuevo KPI{dept ? ` · ${dept.name}` : ""}</div>
+          <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
         </div>
-        <div className="modal__ft"><button className="btn btn--ghost" onClick={onClose}>Cancelar</button></div>
+        <div className="modal__bd">
+          <div className="field">
+            <label>Nombre del indicador</label>
+            <input className="input" placeholder="Ej. Producción Real" value={label} onChange={e=>setLabel(e.target.value)} autoFocus/>
+          </div>
+          <div className="row row--2">
+            <div className="field">
+              <label>Tipo de KPI</label>
+              <select className="input" value={tipo} onChange={e=>setTipo(e.target.value)}>
+                {TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Meta semanal</label>
+              <input className="input mono" type="number" step="1" placeholder="0" value={meta} onChange={e=>setMeta(e.target.value)}/>
+            </div>
+          </div>
+          <div className="field">
+            <label>Acumulado trimestres anteriores <span className="dim">(opcional)</span></label>
+            <input className="input mono" type="number" step="1" placeholder="0" value={acumPrev} onChange={e=>setAcumPrev(e.target.value)}/>
+          </div>
+          {label && meta && (
+            <div style={{padding:"10px 12px",background:"var(--bg-1)",borderRadius:8,border:"1px solid var(--line)",marginTop:4,fontSize:12}}>
+              <span style={{fontWeight:600}}>{label}</span>
+              <span className="dim" style={{marginLeft:8}}>· {tipo} · Meta: {meta}/sem · Q{curQuarter} {curYear}</span>
+            </div>
+          )}
+        </div>
+        <div className="modal__ft">
+          <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn--primary" disabled={!canSubmit} onClick={submit} style={{opacity:canSubmit?1:0.5}}>
+            <Icon name="plus" size={14}/> Crear KPI
+          </button>
+        </div>
       </div>
     </div>
   );
