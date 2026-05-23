@@ -310,12 +310,11 @@ function NotificationsBell({ audit, searchData, departments, role, session, setV
     // Overdue tasks
     (searchData?.tasks || []).filter(t => t.status !== "completed" && new Date(t.due_date) < today)
       .slice(0, 4).forEach(t => out.push({ level: "bad", icon: "warn", title: `Tarea vencida: ${t.title}`, sub: `${D.DEPT_BY_ID[t.department]?.name} · venció ${t.due_date}`, go: () => setView("tasks") }));
-    // At-risk departments (low KPI score)
+    // At-risk departments (low project+tasks score)
     (departments || []).forEach(d => {
-      const list = (searchData?.kpis || {})[d.id] || [];
-      if (!list.length) return;
-      const score = Math.round(list.reduce((s, k) => s + Math.min(1, k.value / k.target), 0) / list.length * 100);
-      if (score < 70) out.push({ level: "warn", icon: "trending", title: `${d.name} en riesgo`, sub: `Score ${score}% — revisar KPIs críticos`, go: () => setView("kpis") });
+      if (!window.computeProjectScore) return;
+      const score = window.computeProjectScore(d.id, searchData?.projects || {}, searchData?.tasks || []);
+      if (score < 70) out.push({ level: "warn", icon: "trending", title: `${d.name} en riesgo`, sub: `Score ${score}% — revisar proyectos y tareas`, go: () => setView("projects") });
     });
     // Recent audit warnings
     (audit || []).filter(a => a.level === "warn").slice(0, 3).forEach(a =>

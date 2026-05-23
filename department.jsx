@@ -34,7 +34,7 @@ function Departments({ session, kpis, kpiWeekly, projects, tasks, poa, departmen
   }
 
   const displayed = departments.filter(d => {
-    const score = window.computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, _scoreYear, _scoreQuarter);
+    const score = window.computeProjectScore(d.id, projects, tasks);
     const matchSearch = d.name.toLowerCase().includes(search.toLowerCase()) || d.short.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" || (filterStatus === "ok" && score >= 85) || (filterStatus === "warn" && score >= 70 && score < 85) || (filterStatus === "risk" && score < 70);
     return matchSearch && matchStatus;
@@ -74,7 +74,7 @@ function Departments({ session, kpis, kpiWeekly, projects, tasks, poa, departmen
 
       <div className="row row--3">
         {displayed.map(d => {
-          const score = window.computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, _scoreYear, _scoreQuarter);
+          const score = window.computeProjectScore(d.id, projects, tasks);
           const open = (projects[d.id] || []).filter(p => p.status !== "done").length;
           const barColor = score >= 85 ? "var(--positive)" : score >= 70 ? "var(--warning)" : "var(--danger)";
           const statusLbl = score >= 85 ? "Óptimo" : score >= 70 ? "Regular" : "En Riesgo";
