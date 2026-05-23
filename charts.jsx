@@ -368,9 +368,15 @@ function NumCell({ value, onCommit, className = "cell-edit mono", style = {}, st
       onChange={e => setLocal(e.target.value)}
       onBlur={() => {
         focused.current = false;
-        const n = parseFloat(local);
-        if (!isNaN(n)) onCommit(n);
-        else setLocal(value == null ? "" : String(value));
+        const trimmed = local.trim();
+        if (trimmed === "") {
+          onCommit(null);
+          setLocal("");
+        } else {
+          const n = parseFloat(trimmed);
+          if (!isNaN(n)) onCommit(n);
+          else setLocal(value == null ? "" : String(value));
+        }
       }}
       onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
       {...rest}
