@@ -1,7 +1,14 @@
 // Projects module: Kanban + Timeline + Calendar views
 const { useState, useEffect, useMemo, useRef } = React;
 
-function ProjectsPage({ session, deptScope, projects, setProjects, addAudit, showToast }) {
+const PROJ_TASK_STATUS = {
+  pending:     { label: "Por hacer",  chip: "chip",        color: "var(--text-3)"   },
+  in_progress: { label: "En curso",   chip: "chip--warn",  color: "var(--warning)"  },
+  blocked:     { label: "Bloqueada",  chip: "chip--bad",   color: "var(--danger)"   },
+  completed:   { label: "Hecho",      chip: "chip--ok",    color: "var(--positive)" },
+};
+
+function ProjectsPage({ session, deptScope, projects, setProjects, tasks, setTasks, addAudit, showToast }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const readOnly = role === "viewer";
@@ -194,7 +201,8 @@ function ProjectsPage({ session, deptScope, projects, setProjects, addAudit, sho
         </Card>
       )}
 
-      {open && <ProjectModal p={open} readOnly={readOnly} onClose={() => setOpen(null)}
+      {open && <ProjectModal p={open} readOnly={readOnly} session={session} tasks={tasks} setTasks={setTasks} addAudit={addAudit} showToast={showToast}
+        onClose={() => setOpen(null)}
         onSave={(patch) => { if (readOnly) return; updateProject(open.id, patch); setOpen({...open, ...patch}); }}
         onMove={(s) => { if (readOnly) return; moveProject(open.id, s); setOpen({...open, status: s}); }}
         onDelete={() => { setDeleteId(open.id); setOpen(null); }}/>}
@@ -435,7 +443,7 @@ function Calendar({ items }) {
   );
 }
 
-function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
+function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly, tasks, setTasks, session, addAudit, showToast }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState(p.title);
   const [prio, setPrio] = useState(p.prio);
@@ -447,15 +455,77 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
   const initialBudget = (D.PROJECT_BUDGETS || {})[p.id] || { budget: 0, spent: 0 };
   const [budget, setBudget] = useState(p.budget != null ? p.budget : initialBudget.budget);
   const [spent, setSpent]   = useState(p.spent  != null ? p.spent  : initialBudget.spent);
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState(session ? initials(session.name) : "");
+  const [newTaskDue, setNewTaskDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
+  const [newTaskPrio, setNewTaskPrio] = useState("medium");
+
   const budgetPct = budget > 0 ? Math.round(spent / budget * 100) : 0;
   const budgetColor = budgetPct >= 100 ? "var(--danger)" : budgetPct >= 85 ? "var(--warning)" : "var(--positive)";
+
+  const projectTasks = useMemo(() => (tasks || []).filter(t => t.project_id === p.id), [tasks, p.id]);
+  const totalTasks = projectTasks.length;
+  const completedTasks = projectTasks.filter(t => t.status === "completed").length;
+  const progressPct = totalTasks > 0 ? Math.round(completedTasks / totalTasks * 100) : 0;
+
+  const autoStatus = useMemo(() => {
+    if (!totalTasks) return p.status;
+    if (completedTasks === totalTasks) return "done";
+    if (projectTasks.every(t => t.status === "pending")) return "todo";
+    return "doing";
+  }, [projectTasks, totalTasks, completedTasks, p.status]);
+
+  useEffect(() => {
+    if (!readOnly && totalTasks > 0 && autoStatus !== p.status) onMove(autoStatus);
+  }, [autoStatus]);
+
+  function toggleTaskDone(tid) {
+    if (readOnly) return;
+    setTasks(prev => prev.map(t => t.id !== tid ? t : { ...t, status: t.status === "completed" ? "pending" : "completed" }));
+  }
+  function changeTaskStatus(tid, status) {
+    if (readOnly) return;
+    setTasks(prev => prev.map(t => t.id === tid ? { ...t, status } : t));
+  }
+  function deleteProjectTask(tid, taskTitle) {
+    if (readOnly) return;
+    setTasks(prev => prev.filter(t => t.id !== tid));
+    addAudit?.({ action: `Tarea eliminada del proyecto: ${taskTitle}`, user: session?.name || "—", dept: p.dept, level: "warn" });
+    showToast?.("Tarea eliminada");
+  }
+  function submitNewTask() {
+    if (!newTaskTitle.trim()) return;
+    const newId = "t" + Math.random().toString(36).slice(2, 6);
+    setTasks(prev => [...prev, {
+      id: newId, title: newTaskTitle.trim(), description: "",
+      department: p.dept, project_id: p.id,
+      priority: newTaskPrio, status: "pending",
+      due_date: newTaskDue, assigned_to: newTaskAssignee || "—",
+      tags: [], checklist: [],
+    }]);
+    addAudit?.({ action: `Tarea creada en proyecto ${p.id}: ${newTaskTitle}`, user: session?.name || "—", dept: p.dept, level: "success" });
+    showToast?.("Tarea creada y vinculada al proyecto");
+    setNewTaskTitle(""); setAddingTask(false);
+  }
+
+  const statusSteps = [
+    { id: "todo",  label: "Por hacer" },
+    { id: "doing", label: "En curso" },
+    { id: "done",  label: "Hecho" },
+  ];
+  const stepIndex = { todo: 0, doing: 1, review: 1, done: 2 }[autoStatus] ?? 0;
+  const progressColor = progressPct === 100 ? "var(--positive)" : progressPct > 0 ? "var(--accent)" : "var(--text-3)";
+
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" style={{width: 640}} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{width: 720, maxHeight: "92vh", display: "flex", flexDirection: "column"}} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
         <div className="modal__hd">
           <div className="flex-c gap-8">
-            <StatusChip status={p.status}/>
-            <span className="dim mono" style={{fontSize: 11}}>{p.id} · {window.INDISA_DATA.DEPT_BY_ID[p.dept]?.short}</span>
+            <StatusChip status={autoStatus}/>
+            <span className="dim mono" style={{fontSize: 11}}>{p.id} · {D.DEPT_BY_ID[p.dept]?.short}</span>
           </div>
           <div className="flex-c gap-6">
             {readOnly && <span className="chip"><Icon name="lock" size={11}/> Solo lectura</span>}
@@ -463,9 +533,14 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
             <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
           </div>
         </div>
-        <div className="modal__bd">
-          <input className="input" style={{fontSize: 16, fontWeight: 500, padding: "8px 10px"}} value={title} onChange={e => setTitle(e.target.value)} onBlur={() => onSave({ title })} disabled={readOnly}/>
-          <div className="row row--3" style={{marginTop: 14}}>
+
+        {/* Scrollable body */}
+        <div className="modal__bd" style={{overflowY: "auto", flex: 1}}>
+
+          <input className="input" style={{fontSize: 16, fontWeight: 500, padding: "8px 10px"}}
+            value={title} onChange={e => setTitle(e.target.value)} onBlur={() => onSave({ title })} disabled={readOnly}/>
+
+          <div className="row row--2" style={{marginTop: 14}}>
             <div className="field">
               <label>Prioridad</label>
               <select className="select" value={prio} onChange={e => { setPrio(e.target.value); onSave({ prio: e.target.value }); }} disabled={readOnly}>
@@ -478,18 +553,169 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
               <label>Fecha límite</label>
               <input className="input mono" type="date" value={due} onChange={e => { setDue(e.target.value); onSave({ due: e.target.value }); }} disabled={readOnly}/>
             </div>
-            <div className="field">
-              <label>Estado</label>
-              <select className="select" value={p.status === "backlog" ? "todo" : p.status} onChange={e => onMove(e.target.value)} disabled={readOnly}>
-                <option value="todo">Por hacer</option>
-                <option value="doing">En curso</option>
-                <option value="review">Revisión</option>
-                <option value="done">Hecho</option>
-              </select>
+          </div>
+
+          {/* ─── PROGRESS & AUTO-STATUS ─── */}
+          <div className="divider"/>
+          <div style={{padding: 16, border: "1px solid var(--line)", borderRadius: 10, background: "var(--bg-1)", marginBottom: 16}}>
+            <div className="flex-c" style={{justifyContent: "space-between", marginBottom: 12}}>
+              <div style={{fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--text-2)"}}>Progreso del Proyecto</div>
+              <span style={{fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em", color: progressColor}}>{progressPct}%</span>
+            </div>
+            <div style={{height: 8, borderRadius: 4, background: "var(--line)", overflow: "hidden", marginBottom: 8}}>
+              <div style={{height: "100%", width: progressPct + "%", borderRadius: 4, background: progressColor, transition: "width .4s ease"}}/>
+            </div>
+            <div className="flex-c" style={{justifyContent: "space-between", marginBottom: 18}}>
+              <span className="dim mono" style={{fontSize: 11}}>
+                {totalTasks > 0 ? `${completedTasks} de ${totalTasks} tareas completadas` : "Sin tareas vinculadas aún"}
+              </span>
+            </div>
+
+            {/* Status stepper */}
+            <div style={{display: "flex", alignItems: "flex-start", position: "relative", paddingBottom: 4}}>
+              <div style={{position: "absolute", left: "16.6%", right: "16.6%", top: 16, height: 2, background: "var(--line)", zIndex: 0}}/>
+              {statusSteps.map((s, i) => {
+                const isActive = i === stepIndex;
+                const isPast = i < stepIndex;
+                const dotBg = isActive ? "var(--accent)" : isPast ? "var(--positive)" : "var(--bg-2)";
+                const dotBorder = isActive ? "var(--accent)" : isPast ? "var(--positive)" : "var(--line)";
+                return (
+                  <div key={s.id} style={{flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1}}>
+                    <div style={{width: 32, height: 32, borderRadius: "50%", display: "grid", placeItems: "center",
+                      background: dotBg, border: "2px solid " + dotBorder, transition: "all .3s ease"}}>
+                      {isPast
+                        ? <span style={{color: "#fff", fontSize: 14, fontWeight: 700}}>✓</span>
+                        : <span style={{width: 9, height: 9, borderRadius: "50%", background: isActive ? "#fff" : "var(--text-3)"}}/>}
+                    </div>
+                    <span style={{fontSize: 11, marginTop: 6, fontWeight: isActive ? 600 : 400,
+                      color: isActive ? "var(--accent)" : isPast ? "var(--positive)" : "var(--text-2)"}}>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="dim" style={{fontSize: 11, textAlign: "center", marginTop: 10}}>
+              El estado cambia automáticamente según el progreso de las tareas
             </div>
           </div>
+
+          {/* ─── PROJECT TASKS ─── */}
+          <div style={{marginBottom: 16}}>
+            <div className="flex-c" style={{justifyContent: "space-between", marginBottom: 12}}>
+              <div style={{fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--text-2)"}}>
+                Tareas del Proyecto&nbsp;<span style={{fontWeight: 400, color: "var(--text-3)"}}>· {totalTasks}</span>
+              </div>
+              {!readOnly && (
+                <button className="btn btn--sm btn--primary" onClick={() => setAddingTask(v => !v)}>
+                  <Icon name="plus" size={12}/> Nueva tarea
+                </button>
+              )}
+            </div>
+
+            {/* Inline new-task form */}
+            {addingTask && !readOnly && (
+              <div style={{padding: 12, marginBottom: 10, border: "1.5px dashed var(--accent)", borderRadius: 8, background: "var(--accent-soft)"}}>
+                <input className="input" placeholder="Título de la tarea…" value={newTaskTitle}
+                  onChange={e => setNewTaskTitle(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && submitNewTask()} autoFocus
+                  style={{fontWeight: 500, marginBottom: 8}}/>
+                <div style={{display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 8, alignItems: "center"}}>
+                  <input className="input mono" type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)}/>
+                  <input className="input mono" placeholder="Resp." maxLength={3}
+                    style={{textTransform: "uppercase", width: 70}}
+                    value={newTaskAssignee} onChange={e => setNewTaskAssignee(e.target.value.toUpperCase())}/>
+                  <select className="select" value={newTaskPrio} onChange={e => setNewTaskPrio(e.target.value)} style={{minWidth: 90}}>
+                    <option value="low">Baja</option>
+                    <option value="medium">Media</option>
+                    <option value="high">Alta</option>
+                    <option value="critical">Crítica</option>
+                  </select>
+                  <div className="flex-c gap-6">
+                    <button className="btn btn--sm btn--primary" onClick={submitNewTask} disabled={!newTaskTitle.trim()} style={{opacity: !newTaskTitle.trim() ? 0.5 : 1}}>Agregar</button>
+                    <button className="btn btn--sm btn--ghost" onClick={() => { setAddingTask(false); setNewTaskTitle(""); }}>✕</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {totalTasks === 0 ? (
+              <div style={{textAlign: "center", padding: "28px 20px", border: "1px dashed var(--line)", borderRadius: 8, background: "var(--bg-1)"}}>
+                <div style={{fontSize: 13, color: "var(--text-2)", marginBottom: 6}}>Sin tareas vinculadas a este proyecto</div>
+                {!readOnly && <div className="dim" style={{fontSize: 11}}>Usa "Nueva tarea" para agregar y rastrear el progreso automáticamente</div>}
+              </div>
+            ) : (
+              <div style={{border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden"}}>
+                {/* Table header */}
+                <div style={{display: "grid", gridTemplateColumns: "32px 1fr 48px 120px 84px 34px", padding: "8px 12px",
+                  borderBottom: "1px solid var(--line)", background: "var(--bg-1)"}}>
+                  {["", "Tarea", "Resp.", "Estado", "Fecha", ""].map((h, i) => (
+                    <div key={i} className="dim mono" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600}}>{h}</div>
+                  ))}
+                </div>
+                {/* Rows */}
+                {projectTasks.map((t, idx) => {
+                  const st = PROJ_TASK_STATUS[t.status] || PROJ_TASK_STATUS.pending;
+                  const isOverdue = t.status !== "completed" && t.due_date && new Date(t.due_date) < new Date();
+                  const isDone = t.status === "completed";
+                  return (
+                    <div key={t.id} style={{
+                      display: "grid", gridTemplateColumns: "32px 1fr 48px 120px 84px 34px",
+                      padding: "10px 12px", alignItems: "center",
+                      borderBottom: idx < projectTasks.length - 1 ? "1px solid var(--line)" : "none",
+                      background: "var(--panel)", transition: "background .12s",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-1)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "var(--panel)"}>
+                      <input type="checkbox" checked={isDone} onChange={() => toggleTaskDone(t.id)} disabled={readOnly}
+                        style={{accentColor: "var(--positive)", width: 15, height: 15, cursor: readOnly ? "default" : "pointer"}}/>
+                      <div style={{minWidth: 0, paddingRight: 8}}>
+                        <div style={{fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          textDecoration: isDone ? "line-through" : "none", color: isDone ? "var(--text-2)" : "var(--text)"}}>
+                          {t.title}
+                        </div>
+                      </div>
+                      <div>
+                        <span style={{width: 26, height: 26, borderRadius: "50%", background: "var(--accent-soft)", color: "var(--accent)",
+                          display: "inline-grid", placeItems: "center", fontSize: 9, fontFamily: "var(--ff-mono)", fontWeight: 700}}>
+                          {t.assigned_to}
+                        </span>
+                      </div>
+                      <div>
+                        {!readOnly ? (
+                          <select style={{fontSize: 11, padding: "3px 6px", borderRadius: 6, border: "1px solid var(--line)",
+                            background: "var(--bg-1)", color: st.color, fontWeight: 600, cursor: "pointer", width: "100%"}}
+                            value={t.status} onChange={e => changeTaskStatus(t.id, e.target.value)}>
+                            <option value="pending">Por hacer</option>
+                            <option value="in_progress">En curso</option>
+                            <option value="completed">Hecho</option>
+                            <option value="blocked">Bloqueada</option>
+                          </select>
+                        ) : (
+                          <span className={"chip " + st.chip} style={{fontSize: 10}}><span className="dot"/>{st.label}</span>
+                        )}
+                      </div>
+                      <div className="mono" style={{fontSize: 11, color: isOverdue ? "var(--danger)" : "var(--text-2)"}}>
+                        {t.due_date?.slice(5) || "—"}{isOverdue && " ⚠"}
+                      </div>
+                      <div style={{textAlign: "center"}}>
+                        {!readOnly && (
+                          <button style={{padding: "3px 5px", background: "transparent", border: "none", borderRadius: 4, cursor: "pointer", color: "var(--text-2)", lineHeight: 1}}
+                            title="Eliminar tarea" onClick={() => deleteProjectTask(t.id, t.title)}
+                            onMouseEnter={e => { e.currentTarget.style.color = "var(--danger)"; e.currentTarget.style.background = "var(--danger-soft)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = "var(--text-2)"; e.currentTarget.style.background = "transparent"; }}>
+                            <Icon name="x" size={12}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ─── BUDGET ─── */}
           <div className="divider"/>
-          {/* Budget tracking */}
           <div style={{padding: 12, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-1)", marginBottom: 14}}>
             <div className="flex-c" style={{justifyContent: "space-between", marginBottom: 8}}>
               <div className="dim" style={{fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600}}>Presupuesto</div>
@@ -511,6 +737,8 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
               <span>Disponible: ${Math.max(0, budget - spent).toLocaleString()}</span>
             </div>
           </div>
+
+          {/* ─── COMMENTS ─── */}
           <div className="flex-c gap-10" style={{justifyContent: "space-between", marginBottom: 10}}>
             <div className="dim" style={{fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em"}}>Comentarios · {notes.length}</div>
             <div className="flex-c gap-8"><Avatars list={p.assignees}/></div>
@@ -527,11 +755,12 @@ function ProjectModal({ p, onClose, onSave, onMove, onDelete, readOnly }) {
             ))}
             <div className="flex-c gap-8">
               <input className="input" placeholder="Escribe un comentario…" value={note} onChange={e => setNote(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && note.trim()) { setNotes([...notes, { user: initials(session.name || "yo"), text: note, ts: "ahora" }]); setNote(""); } }}/>
-              <button className="btn" onClick={() => { if (note.trim()) { setNotes([...notes, { user: "yo", text: note, ts: "ahora" }]); setNote(""); } }}><Icon name="arrow" size={14}/></button>
+                onKeyDown={e => { if (e.key === "Enter" && note.trim()) { setNotes([...notes, { user: initials(session?.name || "yo"), text: note, ts: "ahora" }]); setNote(""); } }}/>
+              <button className="btn" onClick={() => { if (note.trim()) { setNotes([...notes, { user: initials(session?.name || "yo"), text: note, ts: "ahora" }]); setNote(""); } }}><Icon name="arrow" size={14}/></button>
             </div>
           </div>
         </div>
+
         <div className="modal__ft">
           <button className="btn btn--ghost" onClick={onClose}>Cerrar</button>
           {!readOnly && <button className="btn btn--primary" onClick={() => { onSave({ title }); onClose(); }}>Guardar cambios</button>}
