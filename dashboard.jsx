@@ -6,9 +6,10 @@ const MONTH_SHORT_ES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","O
 
 // Weighted multi-factor department performance score
 // KPIs 50% · Projects 25% · Tasks 15% · POA 10%
+// KPI score uses ONLY weekly data entered by users — no legacy seed fallback.
 // Weights are redistributed proportionally when a component has no data.
 function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter) {
-  // KPI score — 50%
+  // KPI score — 50% — only from weekly entries (no seed-data fallback)
   let kpiScore = null;
   const key = `${deptId}_${curYear}_${curQuarter}`;
   const weeklyList = (kpiWeekly || {})[key] || [];
@@ -20,11 +21,8 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
     });
     if (ratios.length > 0) kpiScore = ratios.reduce((a, b) => a + b, 0) / ratios.length;
   }
-  if (kpiScore === null) {
-    const list = kpis[deptId] || [];
-    if (list.length > 0)
-      kpiScore = list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length;
-  }
+  // No legacy fallback — if no weekly KPI data exists, kpiScore stays null
+  // and its 50% weight is redistributed to the other components.
 
   // Project score — 25%: status-weighted progress (not binary done/not-done)
   let projectScore = null;
@@ -64,7 +62,8 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   return Math.min(100, Math.round(active.reduce((s, c) => s + c.score * (c.weight / totalW), 0) * 100));
 }
 
-// KPI-only score (0-100): weekly data preferred, falls back to legacy KPIs
+// KPI-only score (0-100): uses ONLY weekly entries for the selected quarter.
+// Returns 0 when no weekly KPI data has been entered — no seed-data fallback.
 function computeKpiScore(deptId, kpis, kpiWeekly, curYear, curQuarter) {
   const key = `${deptId}_${curYear}_${curQuarter}`;
   const weeklyList = (kpiWeekly || {})[key] || [];
@@ -76,9 +75,6 @@ function computeKpiScore(deptId, kpis, kpiWeekly, curYear, curQuarter) {
     });
     if (ratios.length > 0) return Math.min(100, Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 100));
   }
-  const list = kpis[deptId] || [];
-  if (list.length > 0)
-    return Math.min(100, Math.round(list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length * 100));
   return 0;
 }
 
