@@ -179,7 +179,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
   const totalRisk     = Object.values(projects).flat().filter(p => p.status === "doing" && p.prio === "high").length;
   const totalTasks    = deptScores.reduce((s,d) => s + d.tasks, 0);
   const kpisRed       = deptScores.reduce((s,d) => s + d.critical, 0);
-  const collaborators = (kpis.rh || []).find(k => k.id === "head")?.value || 184;
+  const activeTasks   = (tasks||[]).filter(t => t.status !== "completed").length;
 
   const avgScore = Math.min(100, Math.round(deptScores.reduce((s,d) => s + d.score, 0) / deptScores.length));
   const avgKpiScore  = useMemo(() => {
@@ -191,21 +191,47 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
     return Math.min(100, Math.round(deptList.reduce((s, d) => s + computeProjectScore(d.id, projects, tasks), 0) / deptList.length));
   }, [projects, tasks, departments]);
 
-  // Trend lines — three series (Proyectos, KPIs, Tareas)
-  const trendData = useMemo(() => ({
-    proyectos: [78, 76, 79, 82, 81, 84, 85, 87],
-    kpis:      [82, 80, 81, 83, 82, 83, 85, 86],
-    tareas:    [70, 72, 74, 75, 78, 80, 82, 83],
-    months:    Array.from({length: 8}, (_, i) => MONTH_SHORT_ES[new Date(_now.getFullYear(), _now.getMonth() - 7 + i, 1).getMonth()]),
-  }), []);
+  // Trend lines — real KPI weekly data; current scores for projects/tasks
+  const trendData = useMemo(() => {
+    const months = Array.from({length: 8}, (_, i) => MONTH_SHORT_ES[new Date(_now.getFullYear(), _now.getMonth() - 7 + i, 1).getMonth()]);
+    const deptList = departments && departments.length > 0 ? departments : D.DEPARTMENTS;
+    const taskTotal = (tasks||[]).length;
+    const taskPct = taskTotal > 0 ? Math.round((tasks||[]).filter(t => t.status === "completed").length / taskTotal * 100) : 0;
+    const kpiSeries = months.map((_, mi) => {
+      const d = new Date(_now.getFullYear(), _now.getMonth() - 7 + mi, 1);
+      const q = Math.ceil((d.getMonth() + 1) / 3);
+      const yr = d.getFullYear();
+      const monthInQ = d.getMonth() - (q - 1) * 3;
+      const wStart = monthInQ * 4;
+      const wEnd = Math.min(12, wStart + (monthInQ === 2 ? 4 : 3));
+      const ratios = deptList.flatMap(dept => {
+        const wl = (kpiWeekly || {})[`${dept.id}_${yr}_${q}`] || [];
+        return wl.flatMap(item =>
+          item.semanas.slice(wStart, wEnd + 1)
+            .filter(v => v !== null && v !== undefined)
+            .flatMap(v => item.metaSemanal > 0 ? [Math.min(1, v / item.metaSemanal)] : [])
+        );
+      });
+      return ratios.length > 0 ? Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 100) : null;
+    });
+    const kpiFilled = kpiSeries.map(v => v !== null ? v : avgKpiScore);
+    return { proyectos: months.map(() => avgProjScore), kpis: kpiFilled, tareas: months.map(() => taskPct), months };
+  }, [kpiWeekly, avgProjScore, avgKpiScore, tasks, departments]);
 
-  // Radar dimensions (Scorecard Empresarial)
+  // Radar — real data from computed scores
   const radar = useMemo(() => {
+    const taskTotal = (tasks||[]).length;
+    const taskDone = (tasks||[]).filter(t => t.status === "completed").length;
+    const allProjs = Object.values(projects).flat();
+    const projDone = allProjs.length > 0 ? allProjs.filter(p => p.status === "done").length / allProjs.length : 0;
+    const allGoals = Object.values(poa).flat();
+    const goalProg = allGoals.length > 0 ? allGoals.filter(g => g.progress >= 80).length / allGoals.length : 0;
+    const onTime = taskTotal > 0 ? (tasks||[]).filter(t => t.status === "completed" || new Date(t.due_date) >= _now).length / taskTotal : 0.5;
     return {
-      axes: ["Proyectos", "KPIs", "Tareas", "Calidad", "Eficiencia", "Entregas"],
-      values: [0.78, 0.85, 0.72, 0.68, 0.74, 0.80],
+      axes: ["Proyectos", "KPIs", "Tareas", "POA", "Eficiencia", "Entregas"],
+      values: [avgProjScore / 100, avgKpiScore / 100, taskTotal > 0 ? taskDone / taskTotal : 0, goalProg, onTime, projDone],
     };
-  }, []);
+  }, [avgProjScore, avgKpiScore, tasks, projects, poa]);
 
   // === Render: Dept-scoped (drilled into a department) ===
   if (effDept) {
@@ -247,8 +273,8 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
         </div>
       )}
 
-      {/* KPI strip — Score Global KPI + Score Global Proyectos + 3 metrics */}
-      <div className="row row--5" style={{marginBottom: 14}}>
+      {/* KPI strip — Score Global KPI + Score Global Proyectos + Actividad */}
+      <div className="row row--3" style={{marginBottom: 14}}>
         <div className="kpi kpi--hero" style={{background: "linear-gradient(135deg, #2563eb, #1d4ed8)", boxShadow: "0 8px 24px -8px #2563eb80"}}>
           <div className="kpi__top">
             <div className="kpi__label">Score Global KPI</div>
@@ -289,9 +315,22 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
             </div>
           </div>
         </div>
-        <MetricCard label="Proyectos Totales" value={Object.values(projects).flat().length} sub={`${totalProjects} activos · ${totalRisk} en riesgo`} delta={+4} deltaLabel="vs mes ant." icon="folder"/>
-        <MetricCard label="KPIs en Rojo" value={kpisRed} sub="" delta={0} deltaLabel="Sin cambio" icon="warn" valueColor={kpisRed > 0 ? "var(--danger)" : "var(--text)"}/>
-        <MetricCard label="Colaboradores" value={collaborators} sub="" delta={+5} deltaLabel="este mes" icon="users2"/>
+        <div className="kpi">
+          <div className="kpi__top">
+            <div className="kpi__label">Actividad Global</div>
+            <div className="kpi__ic"><Icon name="activity" size={14}/></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:14}}>
+            <div>
+              <div className="kpi__value" style={{fontSize:30}}>{totalProjects}</div>
+              <div style={{fontSize:11,color:"var(--text-2)",marginTop:3}}>Proyectos activos</div>
+            </div>
+            <div>
+              <div className="kpi__value" style={{fontSize:30}}>{activeTasks}</div>
+              <div style={{fontSize:11,color:"var(--text-2)",marginTop:3}}>Tareas activas</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Trend + Radar */}
@@ -570,26 +609,33 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
       </div>
 
       <div className="row row--212" style={{marginBottom: 14}}>
-        <Card title="Tendencia · Últimos 12 meses" sub={`${list.length} métricas`} headerExtra={
+        <Card title={`Tendencia KPIs · Q${dQuarter} ${dYear}`} sub={`${weeklyList.length} indicadores`} headerExtra={
           <div className="legend" style={{maxWidth: 340, justifyContent: "flex-end"}}>
-            {list.map((k, i) => (
+            {weeklyList.map((k, i) => (
               <span key={k.id} className="lg"><span className="sw" style={{background: PALETTE[i % PALETTE.length]}}/> {k.label}</span>
             ))}
           </div>
         }>
-          <LineChart
-            series={list.map((k, i) => ({ name: k.label, data: [...(k.trend || []).slice(0, -1), k.value], color: PALETTE[i % PALETTE.length] }))}
-            labels={["Jun","Jul","Ago","Sep","Oct","Nov","Dic","Ene","Feb","Mar","Abr","May"]}
-            height={260}
-            area={false}
-          />
+          {weeklyList.length === 0 ? (
+            <div style={{textAlign:"center",padding:"60px 0",color:"var(--text-3)",fontSize:13}}>
+              Sin KPIs para este trimestre ·{" "}
+              <span style={{color:"var(--accent)",cursor:"pointer"}} onClick={() => setView && setView("kpis")}>Agregar →</span>
+            </div>
+          ) : (
+            <LineChart
+              series={weeklyList.map((k, i) => ({
+                name: k.label,
+                data: k.semanas.map(v => v !== null && v !== undefined ? v : 0),
+                color: PALETTE[i % PALETTE.length],
+              }))}
+              labels={WEEKS_D}
+              height={260}
+              area={false}
+            />
+          )}
         </Card>
 
-        <Card title="Indicador principal" sub={list[0]?.label}>
-          <div style={{display: "grid", placeItems: "center"}}>
-            <GaugeChart value={list[0]?.value || 0} target={list[0]?.target || 100} unit={list[0]?.unit || ""} label={list[0]?.label || ""} size={220}/>
-          </div>
-        </Card>
+        <PrivateTodoCard session={session}/>
       </div>
 
       <div style={{marginBottom: 14}}>
@@ -721,6 +767,53 @@ function Avatars({ list }) {
         <span key={i} style={{width: 22, height: 22, borderRadius: "50%", background: "var(--accent-soft)", color: "var(--accent)", border: "1.5px solid var(--panel)", display: "grid", placeItems: "center", fontSize: 9, fontFamily: "var(--ff-mono)", fontWeight: 600, marginLeft: i ? -6 : 0}}>{a}</span>
       ))}
     </div>
+  );
+}
+
+// Private per-user to-do list — stored in localStorage only, never synced to Supabase
+function PrivateTodoCard({ session }) {
+  const storageKey = `indisa_todo_${session.email}`;
+  const [items, setItems] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey)) || []; } catch { return []; }
+  });
+  const [input, setInput] = useState("");
+
+  function persist(next) {
+    setItems(next);
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+  }
+  function add() {
+    if (!input.trim()) return;
+    persist([...items, { id: "td" + Date.now(), text: input.trim(), done: false }]);
+    setInput("");
+  }
+  function toggle(id) { persist(items.map(it => it.id === id ? { ...it, done: !it.done } : it)); }
+  function remove(id) { persist(items.filter(it => it.id !== id)); }
+
+  const pending = items.filter(it => !it.done).length;
+
+  return (
+    <Card title="Lista personal" sub={`Privada · ${pending} pendiente${pending !== 1 ? "s" : ""}`}>
+      <div style={{display:"grid",gap:2,marginBottom:10,maxHeight:220,overflowY:"auto"}}>
+        {items.length === 0 && (
+          <div style={{textAlign:"center",padding:"24px 0",color:"var(--text-3)",fontSize:13}}>Sin tareas pendientes</div>
+        )}
+        {items.map(it => (
+          <div key={it.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 4px",borderBottom:"1px solid var(--line)"}}>
+            <input type="checkbox" checked={it.done} onChange={() => toggle(it.id)} style={{accentColor:"var(--accent)",flexShrink:0,cursor:"pointer"}}/>
+            <span style={{flex:1,fontSize:13,textDecoration:it.done?"line-through":"none",color:it.done?"var(--text-3)":"var(--text)"}}>{it.text}</span>
+            <button onClick={() => remove(it.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text-3)",fontSize:16,padding:"0 2px",lineHeight:1}} title="Eliminar">×</button>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <input className="input" placeholder="Agregar tarea…" value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && add()} style={{flex:1,fontSize:13}}/>
+        <button className="btn btn--sm btn--primary" onClick={add} disabled={!input.trim()} style={{opacity:!input.trim()?0.5:1}}>
+          <Icon name="plus" size={12}/>
+        </button>
+      </div>
+    </Card>
   );
 }
 
