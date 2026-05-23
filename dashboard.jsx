@@ -354,15 +354,18 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
           />
         </Card>
 
-        <Card title="Scorecard Empresarial" sub="Dimensiones de performance">
-          <div style={{display: "grid", placeItems: "center", padding: 4}}>
-            <RadarChart
-              axes={radar.axes}
-              series={[{ data: radar.values, color: "var(--accent)" }]}
-              size={260}
-            />
-          </div>
-        </Card>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Card title="Scorecard Empresarial" sub="Dimensiones de performance">
+            <div style={{display: "grid", placeItems: "center", padding: 4}}>
+              <RadarChart
+                axes={radar.axes}
+                series={[{ data: radar.values, color: "var(--accent)" }]}
+                size={260}
+              />
+            </div>
+          </Card>
+          <PrivateTodoCard session={session}/>
+        </div>
       </div>
 
       {/* Performance por Departamento */}
@@ -565,8 +568,8 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
         </div>
       </div>
 
-      {/* Score strip — KPI · Proyectos · General empresa · 2 KPI metrics */}
-      <div className="row row--5" style={{marginBottom: 14}}>
+      {/* Score strip — KPI · Proyectos · Actividad */}
+      <div className="row row--3" style={{marginBottom: 14}}>
         <div className="kpi kpi--hero" style={{background: "linear-gradient(135deg, #2563eb, #1d4ed8)", boxShadow: "0 8px 24px -8px #2563eb80"}}>
           <div className="kpi__top">
             <div className="kpi__label">Score KPI</div>
@@ -585,27 +588,20 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
         </div>
         <div className="kpi">
           <div className="kpi__top">
-            <div className="kpi__label">Score General Empresa</div>
-            <div className="kpi__ic">GG</div>
+            <div className="kpi__label">Actividad {dept.short}</div>
+            <div className="kpi__ic"><Icon name="activity" size={14}/></div>
           </div>
-          <div className="kpi__value" style={{fontSize: 28, color: globalScoreV >= 85 ? "var(--positive)" : globalScoreV >= 70 ? "var(--warning)" : "var(--danger)"}}>{globalScoreV}%</div>
-          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Promedio todos los deptos</div>
-          <div className="kpi__delta kpi__delta--flat" style={{marginTop: 6, fontSize: 11}}>
-            {kpiScoreV > globalScoreV ? <span style={{color:"var(--positive)"}}>+{kpiScoreV - globalScoreV}pts vs. empresa</span> : kpiScoreV < globalScoreV ? <span style={{color:"var(--danger)"}}>{kpiScoreV - globalScoreV}pts vs. empresa</span> : <span>= empresa</span>}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginTop:14}}>
+            <div>
+              <div className="kpi__value" style={{fontSize:30}}>{ps.filter(p => p.status !== "done").length}</div>
+              <div style={{fontSize:11,color:"var(--text-2)",marginTop:3}}>Proyectos activos</div>
+            </div>
+            <div>
+              <div className="kpi__value" style={{fontSize:30}}>{(tasks||[]).filter(t => t.department === dept.id && t.status !== "completed").length}</div>
+              <div style={{fontSize:11,color:"var(--text-2)",marginTop:3}}>Tareas activas</div>
+            </div>
           </div>
         </div>
-        {weeklyList.length > 0
-          ? weeklyList.slice(0, 2).map(k => {
-              const { lastVal, varSem } = computeW(k);
-              const delta = varSem !== null && k.metaSemanal > 0 ? Math.round(varSem / k.metaSemanal * 1000) / 10 : 0;
-              return <MetricCard key={k.id} label={k.label} value={lastVal !== null ? fmtW(lastVal) : "—"} sub={`Meta ${k.metaSemanal}/sem`}
-                delta={delta} deltaLabel="vs meta sem." icon="spark"/>;
-            })
-          : list.slice(0, 2).map(k => (
-              <MetricCard key={k.id} label={k.label} value={k.value + (k.unit || "")} sub={`Meta ${nice(k.target, 0)}${k.unit}`}
-                delta={Math.round(k.deltaPct * 10) / 10} deltaLabel="vs mes ant." icon="spark"/>
-            ))
-        }
       </div>
 
       <div className="row row--212" style={{marginBottom: 14}}>
@@ -635,7 +631,7 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
           )}
         </Card>
 
-        <PrivateTodoCard session={session}/>
+        {session.role !== "owner" && <PrivateTodoCard session={session}/>}
       </div>
 
       <div style={{marginBottom: 14}}>

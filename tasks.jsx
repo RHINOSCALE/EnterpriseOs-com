@@ -276,7 +276,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, users, addAu
         </Card>
       )}
 
-      {open && <TaskModal t={open} projects={projects} users={users} readOnly={readOnly} onClose={() => setOpen(null)}
+      {open && <TaskModal t={open} projects={projects} users={users} session={session} readOnly={readOnly} onClose={() => setOpen(null)}
         onSave={(patch) => { if (readOnly) return; updateTask(open.id, patch); setOpen({...open, ...patch}); }}
         onToggle={(cid) => {
           if (readOnly) return;
@@ -312,7 +312,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, users, addAu
   );
 }
 
-function TaskModal({ t, projects, users, onClose, onSave, onToggle, onAddCheck, onRemoveCheck, onDelete, readOnly }) {
+function TaskModal({ t, projects, users, session, onClose, onSave, onToggle, onAddCheck, onRemoveCheck, onDelete, readOnly }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState(t.title);
   const [desc, setDesc] = useState(t.description || "");
@@ -382,7 +382,7 @@ function TaskModal({ t, projects, users, onClose, onSave, onToggle, onAddCheck, 
             <label>Asignada a</label>
             <select className="select" value={assignee} onChange={e => { setAssignee(e.target.value); onSave({ assigned_to: e.target.value }); }} disabled={readOnly}>
               <option value="">— sin asignar —</option>
-              {Object.values(users || {}).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
+              {Object.values(users || {}).filter(u => session?.role === "owner" || u.dept === t.department).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
                 <option key={u.email} value={u.email.toLowerCase()}>{u.name || u.email}</option>
               ))}
             </select>
@@ -431,7 +431,7 @@ function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) 
   const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); });
   const [assignee, setAssignee] = useState(session.email?.toLowerCase() || "");
 
-  const projOptions = projects[dept] || [];
+  const projOptions = (projects[dept] || []).filter(p => p.status !== "done");
 
   function submit() {
     if (!title.trim()) return;
@@ -451,7 +451,7 @@ function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) 
           <div className="row row--2">
             <div className="field">
               <label>Departamento</label>
-              <select className="select" value={dept} onChange={e => { setDept(e.target.value); setProject(""); }}>
+              <select className="select" value={dept} onChange={e => { setDept(e.target.value); setProject(""); setAssignee(""); }}>
                 {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
@@ -482,7 +482,7 @@ function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) 
             <label>Asignada a</label>
             <select className="select" value={assignee} onChange={e => setAssignee(e.target.value)}>
               <option value="">— sin asignar —</option>
-              {Object.values(users || {}).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
+              {Object.values(users || {}).filter(u => session?.role === "owner" || u.dept === dept).sort((a,b) => (a.name||a.email).localeCompare(b.name||b.email)).map(u => (
                 <option key={u.email} value={u.email.toLowerCase()}>{u.name || u.email}</option>
               ))}
             </select>

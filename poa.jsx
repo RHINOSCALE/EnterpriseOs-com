@@ -9,7 +9,18 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
   const curYear = new Date().getFullYear();
   const curQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
 
-  const groups = effDept ? [[effDept, poa[effDept] || []]] : Object.entries(poa);
+  const groups = effDept
+    ? (() => {
+        const result = [[effDept, poa[effDept] || []]];
+        Object.entries(poa).forEach(([did, goals]) => {
+          if (did !== effDept) {
+            const bhagsHere = (goals || []).filter(g => g.type === "bhag");
+            if (bhagsHere.length) result.unshift([did, bhagsHere]);
+          }
+        });
+        return result;
+      })()
+    : Object.entries(poa);
 
   const [addingGoal, setAddingGoal] = useState(false);
   const [deleteGoal, setDeleteGoal] = useState(null);
@@ -75,18 +86,19 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
     setAddingGoal(false);
   }
 
-  function createAndLinkProject(deptId, goalId, projectData) {
+  function createAndLinkProject(goalDeptId, goalId, projectData) {
+    const targetDept = projectData.targetDept || goalDeptId;
     const newId = "n" + Math.random().toString(36).slice(2, 6);
     const np = { id: newId, ...projectData };
-    setProjects(prev => ({ ...prev, [deptId]: [...(prev[deptId] || []), np] }));
+    setProjects(prev => ({ ...prev, [targetDept]: [...(prev[targetDept] || []), np] }));
     setPoa(prev => {
       const out = { ...prev };
-      out[deptId] = (out[deptId] || []).map(g =>
+      out[goalDeptId] = (out[goalDeptId] || []).map(g =>
         g.id !== goalId ? g : { ...g, linked_projects: [...new Set([...(g.linked_projects || []), newId])] }
       );
       return out;
     });
-    addAudit({ action: `Proyecto creado y vinculado: ${projectData.title}`, user: session.name, dept: deptId, level: "success" });
+    addAudit({ action: `Proyecto creado y vinculado: ${projectData.title}`, user: session.name, dept: targetDept, level: "success" });
     showToast("Proyecto creado y vinculado a la meta");
     setCreatingProject(null);
   }
@@ -101,18 +113,19 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
     });
   }
 
-  function createAndLinkKpi(deptId, goalId, kpiData) {
-    const k = `${deptId}_${curYear}_${curQuarter}`;
+  function createAndLinkKpi(goalDeptId, goalId, kpiData) {
+    const targetDept = kpiData.targetDept || goalDeptId;
+    const k = `${targetDept}_${curYear}_${curQuarter}`;
     setKpiWeekly(prev => ({ ...prev, [k]: [...(prev[k] || []), kpiData] }));
-    const ref = `${deptId}:${kpiData.id}`;
+    const ref = `${targetDept}:${kpiData.id}`;
     setPoa(prev => {
       const out = { ...prev };
-      out[deptId] = (out[deptId] || []).map(g =>
+      out[goalDeptId] = (out[goalDeptId] || []).map(g =>
         g.id !== goalId ? g : { ...g, linked_kpis: [...new Set([...(g.linked_kpis || []), ref])] }
       );
       return out;
     });
-    addAudit({ action: `KPI creado y vinculado: ${kpiData.label}`, user: session.name, dept: deptId, level: "success" });
+    addAudit({ action: `KPI creado y vinculado: ${kpiData.label}`, user: session.name, dept: targetDept, level: "success" });
     showToast("KPI creado y vinculado a la meta");
     setCreatingKpi(null);
   }
@@ -254,7 +267,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
                       <div style={{marginBottom: 18}}>
                         <div className="flex-c gap-8" style={{marginBottom: 8}}>
                           <div className="dim" style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",fontWeight:500}}>Proyectos</div>
-                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingProject({deptId,goalId:g.id})}>
+                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingProject({deptId,goalId:g.id,isBhag:g.type==="bhag"})}>
                             <Icon name="plus" size={11}/> Crear
                           </button>}
                         </div>
@@ -285,7 +298,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
                       <div>
                         <div className="flex-c gap-8" style={{marginBottom: 8}}>
                           <div className="dim" style={{fontSize:10,textTransform:"uppercase",letterSpacing:".08em",fontWeight:500}}>KPIs</div>
-                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingKpi({deptId,goalId:g.id})}>
+                          {!readOnly && <button className="btn btn--sm" style={{marginLeft:"auto"}} onClick={() => setCreatingKpi({deptId,goalId:g.id,isBhag:g.type==="bhag"})}>
                             <Icon name="plus" size={11}/> Crear
                           </button>}
                         </div>
@@ -362,6 +375,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
         <NewProjectInPOAModal
           session={session}
           deptId={creatingProject.deptId}
+          isBhag={creatingProject.isBhag}
           onClose={() => setCreatingProject(null)}
           onCreate={data => createAndLinkProject(creatingProject.deptId, creatingProject.goalId, data)}
         />
@@ -370,6 +384,7 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
       {creatingKpi && (
         <NewKpiInPOAModal
           deptId={creatingKpi.deptId}
+          isBhag={creatingKpi.isBhag}
           curYear={curYear} curQuarter={curQuarter}
           onClose={() => setCreatingKpi(null)}
           onCreate={kpi => createAndLinkKpi(creatingKpi.deptId, creatingKpi.goalId, kpi)}
@@ -392,18 +407,19 @@ function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, setKpiWeekl
   );
 }
 
-function NewProjectInPOAModal({ session, deptId, onClose, onCreate }) {
+function NewProjectInPOAModal({ session, deptId, isBhag, onClose, onCreate }) {
   const D = window.INDISA_DATA;
   const [title, setTitle] = useState("");
   const [prio, setPrio] = useState("med");
   const [status, setStatus] = useState("todo");
   const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return d.toISOString().slice(0, 10); });
   const [tag, setTag] = useState("");
-  const dept = D.DEPT_BY_ID[deptId];
+  const [targetDept, setTargetDept] = useState(isBhag ? (D.DEPARTMENTS[0]?.id || deptId) : deptId);
+  const dept = D.DEPT_BY_ID[targetDept];
 
   function submit() {
     if (!title.trim()) return;
-    onCreate({ title: title.trim(), dept: deptId, prio, status, due, tag: tag || "general", assignees: [initials(session.name)] });
+    onCreate({ title: title.trim(), dept: targetDept, prio, status, due, tag: tag || "general", assignees: [initials(session.name)], targetDept });
   }
 
   return (
@@ -414,6 +430,14 @@ function NewProjectInPOAModal({ session, deptId, onClose, onCreate }) {
           <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
         </div>
         <div className="modal__bd">
+          {isBhag && (
+            <div className="field">
+              <label>Departamento destino</label>
+              <select className="select" value={targetDept} onChange={e=>setTargetDept(e.target.value)}>
+                {D.DEPARTMENTS.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="field"><label>Título del proyecto</label><input className="input" placeholder="Ej. Rediseño del portal web" value={title} onChange={e=>setTitle(e.target.value)} autoFocus/></div>
           <div className="row row--2">
             <div className="field">
@@ -454,20 +478,21 @@ function NewProjectInPOAModal({ session, deptId, onClose, onCreate }) {
   );
 }
 
-function NewKpiInPOAModal({ deptId, curYear, curQuarter, onClose, onCreate }) {
+function NewKpiInPOAModal({ deptId, isBhag, curYear, curQuarter, onClose, onCreate }) {
   const D = window.INDISA_DATA;
-  const dept = D.DEPT_BY_ID[deptId];
   const [label, setLabel] = useState("");
   const [tipo, setTipo] = useState("Cantidad");
   const [meta, setMeta] = useState("");
   const [acumPrev, setAcumPrev] = useState("");
+  const [targetDept, setTargetDept] = useState(isBhag ? (D.DEPARTMENTS[0]?.id || deptId) : deptId);
   const TIPOS = ["Cantidad", "Porcentaje", "Tiempo", "Moneda"];
+  const dept = D.DEPT_BY_ID[targetDept];
   const canSubmit = label.trim() && meta !== "" && !isNaN(parseFloat(meta));
 
   function submit() {
     if (!canSubmit) return;
     const id = (label.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"").slice(0,15)||"kpi") + "_" + Date.now().toString(36).slice(-4);
-    onCreate({ id, label: label.trim(), tipo, metaSemanal: parseFloat(meta), semanas: Array(13).fill(null), acumuladoPrevio: parseFloat(acumPrev)||0 });
+    onCreate({ id, label: label.trim(), tipo, metaSemanal: parseFloat(meta), semanas: Array(13).fill(null), acumuladoPrevio: parseFloat(acumPrev)||0, targetDept });
   }
 
   return (
@@ -478,6 +503,14 @@ function NewKpiInPOAModal({ deptId, curYear, curQuarter, onClose, onCreate }) {
           <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
         </div>
         <div className="modal__bd">
+          {isBhag && (
+            <div className="field">
+              <label>Departamento destino</label>
+              <select className="select" value={targetDept} onChange={e=>setTargetDept(e.target.value)}>
+                {D.DEPARTMENTS.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="field">
             <label>Nombre del indicador</label>
             <input className="input" placeholder="Ej. Producción Real" value={label} onChange={e=>setLabel(e.target.value)} autoFocus/>
