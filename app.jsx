@@ -86,8 +86,16 @@ function usePersistentState(key, initial) {
 
 function App() {
   const D = window.INDISA_DATA;
-  // Session-scoped (not persisted)
-  const [session, setSession] = uS(null);
+  // Session — persisted to localStorage so refresh keeps the user logged in
+  const [session, setSession] = uS(() => {
+    try { const r = localStorage.getItem("indisa_session"); return r ? JSON.parse(r) : null; } catch { return null; }
+  });
+  uE(() => {
+    try {
+      if (session) localStorage.setItem("indisa_session", JSON.stringify(session));
+      else localStorage.removeItem("indisa_session");
+    } catch {}
+  }, [session]);
   const [view, setView] = uS("dashboard");
   const [deptScope, setDeptScope] = uS(null);
   const [toast, setToast] = uS(null);
