@@ -1,9 +1,11 @@
 // POA — Plan Operativo Anual
 const { useState, useEffect, useMemo, useRef } = React;
 
-function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
+function POAPage({ session, deptScope, poa, setPoa, kpis, kpiWeekly, projects, tasks, addAudit, showToast }) {
   const D = window.INDISA_DATA;
   const role = session.role;
+  const curYear = new Date().getFullYear();
+  const curQuarter = Math.ceil((new Date().getMonth() + 1) / 3);
   const readOnly = role === "viewer";
   const effDept = role === "owner" ? deptScope : session.dept;
 
@@ -175,8 +177,19 @@ function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
               <span style={{fontSize: 11, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600}}>{D.DEPT_BY_ID[deptId].name}</span>
               <span className="dim" style={{fontSize: 11}}>· {goals.length} {goals.length === 1 ? "meta" : "metas"}</span>
             </div>
-            {goals.map(g => (
-              <div key={g.id} className="goal" style={{marginBottom: 10}}>
+            {goals.map(g => {
+              const isBhag = g.type === "bhag";
+              return (
+              <div key={g.id} className="goal" style={{marginBottom: 10, overflow: "hidden", ...(isBhag ? { border: "2px solid #8b5cf6", boxShadow: "0 0 0 3px #8b5cf614, 0 8px 28px -6px #8b5cf650" } : {})}}>
+                {isBhag && (
+                  <div style={{margin: "-1px -1px 12px", padding: "10px 16px", background: "linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa)", color: "#fff", display: "flex", alignItems: "center", gap: 10}}>
+                    <span style={{fontSize: 18}}>🏆</span>
+                    <div>
+                      <div style={{fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".12em"}}>BHAG · Meta Audaz a 10 Años</div>
+                      <div style={{fontSize: 11, opacity: 0.85, marginTop: 1}}>Aplica a toda la empresa · Objetivo transformacional</div>
+                    </div>
+                  </div>
+                )}
                 <div className="goal__hd">
                   {g.type && D.POA_TYPES[g.type] && (
                     <select className="select" value={g.type} disabled={readOnly} onChange={e => {
@@ -267,11 +280,46 @@ function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
                         </div>
                       ))}
                     </div>
+                    {/* KPI tracking row */}
+                    <div style={{marginTop: 14}}>
+                      <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6, fontWeight: 500, color: "var(--accent)"}}>KPIs · Score trimestral (0-10)</div>
+                      <div className="q-cols">
+                        {[1,2,3,4].map(q => {
+                          const hasData = kpiWeekly && ((kpiWeekly[`${deptId}_${curYear}_${q}`] || []).length > 0);
+                          const raw = hasData && window.computeKpiScore ? window.computeKpiScore(deptId, kpis, kpiWeekly, curYear, q) : null;
+                          const val = raw !== null ? (raw / 10).toFixed(1) : null;
+                          return (
+                            <div key={q} className="q" style={{background: hasData ? "var(--accent-soft)" : undefined, borderColor: hasData ? "var(--accent-line)" : undefined}}>
+                              <div className="l" style={{color: hasData ? "var(--accent)" : undefined}}>Q{q}</div>
+                              <div className="mono" style={{fontSize: 14, fontWeight: 700, textAlign: "center", color: val !== null ? "var(--accent)" : "var(--text-3)"}}>{val !== null ? val : "—"}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {/* Projects tracking row */}
+                    <div style={{marginTop: 14}}>
+                      <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6, fontWeight: 500, color: "var(--positive)"}}>Proyectos · Score trimestral (0-10)</div>
+                      <div className="q-cols">
+                        {[1,2,3,4].map(q => {
+                          const isCur = q === curQuarter;
+                          const raw = isCur && projects && tasks && window.computeProjectScore ? window.computeProjectScore(deptId, projects, tasks) : null;
+                          const val = raw !== null ? (raw / 10).toFixed(1) : null;
+                          return (
+                            <div key={q} className="q" style={{background: isCur ? "#10b98112" : undefined, borderColor: isCur ? "#10b98140" : undefined}}>
+                              <div className="l" style={{color: isCur ? "var(--positive)" : undefined}}>Q{q}</div>
+                              <div className="mono" style={{fontSize: 14, fontWeight: 700, textAlign: "center", color: val !== null ? "var(--positive)" : "var(--text-3)"}}>{val !== null ? val : "—"}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <div className="dim" style={{fontSize: 11, marginTop: 8}}>última actualización: 2026-05-12</div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>

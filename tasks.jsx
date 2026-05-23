@@ -26,7 +26,7 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
 
   const [view, setView] = useState("kanban");
   const [dragId, setDragId] = useState(null);
-  const [filter, setFilter] = useState({ prio: "all", status: "all" });
+  const [filter, setFilter] = useState({ prios: [], statuses: [] });
   const [showFilter, setShowFilter] = useState(false);
   const [open, setOpen] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -85,8 +85,8 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
   }
 
   const filtered = list.filter(t =>
-    (filter.prio === "all" || t.priority === filter.prio) &&
-    (filter.status === "all" || t.status === filter.status)
+    (filter.prios.length === 0 || filter.prios.includes(t.priority)) &&
+    (filter.statuses.length === 0 || filter.statuses.includes(t.status))
   );
 
   // Stats
@@ -105,21 +105,41 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
         <div className="page__actions">
           <div style={{position: "relative"}}>
             <button className="btn" onClick={() => setShowFilter(f => !f)}>
-              <Icon name="filter" size={14}/> {filter.prio !== "all" ? `Prio: ${TASK_PRIO[filter.prio].label}` : filter.status !== "all" ? `Estado: ${TASK_STATUS.find(s => s.id === filter.status).label}` : "Filtrar"}
+              <Icon name="filter" size={14}/> {(filter.prios.length + filter.statuses.length) > 0 ? `${filter.prios.length + filter.statuses.length} filtro${filter.prios.length + filter.statuses.length > 1 ? "s" : ""}` : "Filtrar"}
             </button>
             {showFilter && (
-              <div style={{position: "absolute", right: 0, top: "calc(100% + 6px)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 12, zIndex: 40, minWidth: 200, boxShadow: "var(--shadow-2)", display: "grid", gap: 8}}>
-                <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em"}}>Prioridad</div>
-                <select className="select" value={filter.prio} onChange={e => setFilter({...filter, prio: e.target.value})}>
-                  <option value="all">Todas</option>
-                  {Object.entries(TASK_PRIO).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-                <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", marginTop: 6}}>Estado</div>
-                <select className="select" value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})}>
-                  <option value="all">Todos</option>
-                  {TASK_STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-                <button className="btn btn--sm" style={{marginTop: 6}} onClick={() => { setFilter({prio:"all",status:"all"}); setShowFilter(false); }}>Limpiar filtros</button>
+              <div style={{position: "absolute", right: 0, top: "calc(100% + 6px)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 10, padding: 12, zIndex: 40, minWidth: 220, boxShadow: "var(--shadow-2)", display: "grid", gap: 10}}>
+                <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600}}>Prioridad</div>
+                <div style={{display: "flex", flexWrap: "wrap", gap: 5}}>
+                  {Object.entries(TASK_PRIO).map(([k,v]) => {
+                    const sel = filter.prios.includes(k);
+                    return (
+                      <div key={k} onClick={() => setFilter(f => ({...f, prios: sel ? f.prios.filter(x => x !== k) : [...f.prios, k]}))}
+                        style={{padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 500, userSelect: "none",
+                          border: "1px solid " + (sel ? v.color : "var(--line)"),
+                          background: sel ? v.color + "18" : "var(--bg-1)",
+                          color: sel ? v.color : "var(--text-2)"}}>
+                        {v.label}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600}}>Estado</div>
+                <div style={{display: "flex", flexWrap: "wrap", gap: 5}}>
+                  {TASK_STATUS.map(s => {
+                    const sel = filter.statuses.includes(s.id);
+                    return (
+                      <div key={s.id} onClick={() => setFilter(f => ({...f, statuses: sel ? f.statuses.filter(x => x !== s.id) : [...f.statuses, s.id]}))}
+                        style={{padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 500, userSelect: "none",
+                          border: "1px solid " + (sel ? s.color : "var(--line)"),
+                          background: sel ? s.color + "18" : "var(--bg-1)",
+                          color: sel ? s.color : "var(--text-2)"}}>
+                        {s.label}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="btn btn--sm" onClick={() => { setFilter({prios:[],statuses:[]}); setShowFilter(false); }}>Limpiar filtros</button>
               </div>
             )}
           </div>
