@@ -103,7 +103,7 @@ function Departments({ session, kpis, kpiWeekly, projects, tasks, poa, departmen
                 <div className="deptperf__bar"><span style={{width: Math.min(100, score) + "%", background: barColor}}/></div>
                 <div className="flex-c gap-12" style={{marginTop: 12, fontSize: 12}}>
                   <span><b style={{fontWeight: 600}}>{open}</b> <span className="dim">proyectos</span></span>
-                  <span><b style={{fontWeight: 600}}>{list.length}</b> <span className="dim">KPIs</span></span>
+                  <span><b style={{fontWeight: 600}}>{(kpis[d.id] || []).length}</b> <span className="dim">KPIs</span></span>
                   <span><b style={{fontWeight: 600}}>2</b> <span className="dim">viewers</span></span>
                 </div>
               </div>
