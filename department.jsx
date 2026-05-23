@@ -189,7 +189,7 @@ function KPIPage({ session, deptScope, setDeptScope, kpis, setKpis, kpiWeekly, s
   const [deptPickerOpen, setDeptPickerOpen] = useState(false);
 
   const Q_LABELS = ["1ER", "2DO", "3ER", "4TO"];
-  const WEEKS = Array.from({ length: 13 }, (_, i) => `S${i + 1}`);
+  const WEEKS = Array.from({ length: 13 }, (_, i) => `S${(quarter - 1) * 13 + i + 1}`);
 
   const currentWeekIdx = useMemo(() => {
     const now = new Date();

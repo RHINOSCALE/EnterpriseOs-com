@@ -457,7 +457,7 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
   const dYear = _yr;
   const dQuarter = _qtr;
   const Q_LABELS_D = ["1ER","2DO","3ER","4TO"];
-  const WEEKS_D = Array.from({length: 13}, (_, i) => `S${i + 1}`);
+  const WEEKS_D = Array.from({length: 13}, (_, i) => `S${(dQuarter - 1) * 13 + i + 1}`);
   const kpiKey = `${dept.id}_${dYear}_${dQuarter}`;
   const weeklyList = (kpiWeekly || {})[kpiKey] || [];
   const _qStart = new Date(dYear, (dQuarter - 1) * 3, 1);
