@@ -62,6 +62,44 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   return Math.min(100, Math.round(active.reduce((s, c) => s + c.score * (c.weight / totalW), 0) * 100));
 }
 
+// KPI-only score (0-100): weekly data preferred, falls back to legacy KPIs
+function computeKpiScore(deptId, kpis, kpiWeekly, curYear, curQuarter) {
+  const key = `${deptId}_${curYear}_${curQuarter}`;
+  const weeklyList = (kpiWeekly || {})[key] || [];
+  if (weeklyList.length > 0) {
+    const ratios = weeklyList.flatMap(k => {
+      const filled = k.semanas.filter(v => v !== null && v !== undefined);
+      const last = filled.length ? filled[filled.length - 1] : null;
+      return last !== null && k.metaSemanal > 0 ? [Math.min(1, last / k.metaSemanal)] : [];
+    });
+    if (ratios.length > 0) return Math.min(100, Math.round(ratios.reduce((a, b) => a + b, 0) / ratios.length * 100));
+  }
+  const list = kpis[deptId] || [];
+  if (list.length > 0)
+    return Math.min(100, Math.round(list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length * 100));
+  return 0;
+}
+
+// Projects+Tasks score (0-100): projects 62.5%, tasks 37.5% (normalised within that bucket)
+function computeProjectScore(deptId, projects, tasks) {
+  const deptProjects = projects[deptId] || [];
+  if (!deptProjects.length) return 0;
+  const projRatio = deptProjects.filter(p => p.status === "done").length / deptProjects.length;
+  const pids = new Set(deptProjects.map(p => p.id));
+  const deptTasks = (tasks || []).filter(t => pids.has(t.project_id));
+  if (!deptTasks.length) return Math.min(100, Math.round(projRatio * 100));
+  const taskRatio = deptTasks.filter(t => t.status === "completed").length / deptTasks.length;
+  return Math.min(100, Math.round((projRatio * 0.625 + taskRatio * 0.375) * 100));
+}
+
+// Company-wide score: simple average of all department scores
+function computeGlobalScore(kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter) {
+  const depts = window.INDISA_DATA.DEPARTMENTS;
+  if (!depts.length) return 0;
+  const total = depts.reduce((s, d) => s + computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter), 0);
+  return Math.min(100, Math.round(total / depts.length));
+}
+
 function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly, projects, tasks, poa, departments, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
@@ -369,11 +407,16 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
   const list = kpis[dept.id] || [];
   const ps = projects[dept.id] || [];
   const _now = new Date();
-  const score = computeDeptScore(dept.id, kpis, kpiWeekly, projects, tasks, poa, _now.getFullYear(), Math.ceil((_now.getMonth() + 1) / 3));
+  const _yr = _now.getFullYear();
+  const _qtr = Math.ceil((_now.getMonth() + 1) / 3);
+  const score      = computeDeptScore(dept.id, kpis, kpiWeekly, projects, tasks, poa, _yr, _qtr);
+  const kpiScoreV  = computeKpiScore(dept.id, kpis, kpiWeekly, _yr, _qtr);
+  const projScoreV = computeProjectScore(dept.id, projects, tasks);
+  const globalScoreV = computeGlobalScore(kpis, kpiWeekly, projects, tasks, poa, _yr, _qtr);
 
   // Weekly KPI helpers
-  const dYear = _now.getFullYear();
-  const dQuarter = Math.ceil((_now.getMonth() + 1) / 3);
+  const dYear = _yr;
+  const dQuarter = _qtr;
   const Q_LABELS_D = ["1ER","2DO","3ER","4TO"];
   const WEEKS_D = Array.from({length: 13}, (_, i) => `S${i + 1}`);
   const kpiKey = `${dept.id}_${dYear}_${dQuarter}`;
@@ -444,20 +487,47 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects,
         </div>
       </div>
 
-      {/* KPI strip for dept */}
+      {/* Score strip — KPI · Proyectos · General empresa · 2 KPI metrics */}
       <div className="row row--5" style={{marginBottom: 14}}>
-        <div className="kpi kpi--hero" style={{background: `linear-gradient(135deg, ${dept.color}, ${dept.color}dd)`, boxShadow: `0 8px 24px -8px ${dept.color}80`}}>
+        <div className="kpi kpi--hero" style={{background: "linear-gradient(135deg, #2563eb, #1d4ed8)", boxShadow: "0 8px 24px -8px #2563eb80"}}>
           <div className="kpi__top">
-            <div className="kpi__label">Score Departamento</div>
+            <div className="kpi__label">Score KPI</div>
             <div className="kpi__ic">{dept.short}</div>
           </div>
-          <div className="kpi__value" style={{fontSize: 30}}>{score}%</div>
-          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Performance del departamento</div>
+          <div className="kpi__value" style={{fontSize: 30}}>{kpiScoreV}%</div>
+          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Indicadores vs. meta</div>
         </div>
-        {list.slice(0, 4).map(k => (
-          <MetricCard key={k.id} label={k.label} value={k.value + (k.unit || "")} sub={`Meta ${nice(k.target, 0)}${k.unit}`}
-            delta={Math.round(k.deltaPct * 10) / 10} deltaLabel="vs mes ant." icon="spark"/>
-        ))}
+        <div className="kpi kpi--hero" style={{background: `linear-gradient(135deg, ${dept.color}, ${dept.color}bb)`, boxShadow: `0 8px 24px -8px ${dept.color}80`}}>
+          <div className="kpi__top">
+            <div className="kpi__label">Score Proyectos</div>
+            <div className="kpi__ic">{dept.short}</div>
+          </div>
+          <div className="kpi__value" style={{fontSize: 30}}>{projScoreV}%</div>
+          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Proyectos + Tareas</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi__top">
+            <div className="kpi__label">Score General Empresa</div>
+            <div className="kpi__ic">GG</div>
+          </div>
+          <div className="kpi__value" style={{fontSize: 28, color: globalScoreV >= 85 ? "var(--positive)" : globalScoreV >= 70 ? "var(--warning)" : "var(--danger)"}}>{globalScoreV}%</div>
+          <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Promedio todos los deptos</div>
+          <div className="kpi__delta kpi__delta--flat" style={{marginTop: 6, fontSize: 11}}>
+            {kpiScoreV > globalScoreV ? <span style={{color:"var(--positive)"}}>+{kpiScoreV - globalScoreV}pts vs. empresa</span> : kpiScoreV < globalScoreV ? <span style={{color:"var(--danger)"}}>{kpiScoreV - globalScoreV}pts vs. empresa</span> : <span>= empresa</span>}
+          </div>
+        </div>
+        {weeklyList.length > 0
+          ? weeklyList.slice(0, 2).map(k => {
+              const { lastVal, varSem } = computeW(k);
+              const delta = varSem !== null && k.metaSemanal > 0 ? Math.round(varSem / k.metaSemanal * 1000) / 10 : 0;
+              return <MetricCard key={k.id} label={k.label} value={lastVal !== null ? fmtW(lastVal) : "—"} sub={`Meta ${k.metaSemanal}/sem`}
+                delta={delta} deltaLabel="vs meta sem." icon="spark"/>;
+            })
+          : list.slice(0, 2).map(k => (
+              <MetricCard key={k.id} label={k.label} value={k.value + (k.unit || "")} sub={`Meta ${nice(k.target, 0)}${k.unit}`}
+                delta={Math.round(k.deltaPct * 10) / 10} deltaLabel="vs mes ant." icon="spark"/>
+            ))
+        }
       </div>
 
       <div className="row row--212" style={{marginBottom: 14}}>
@@ -615,4 +685,4 @@ function Avatars({ list }) {
   );
 }
 
-Object.assign(window, { Dashboard, Card, MetricCard, DeptPerfRow, StatusChip, Avatars, ScoreGlobalCard, computeDeptScore });
+Object.assign(window, { Dashboard, Card, MetricCard, DeptPerfRow, StatusChip, Avatars, ScoreGlobalCard, computeDeptScore, computeKpiScore, computeProjectScore, computeGlobalScore });
