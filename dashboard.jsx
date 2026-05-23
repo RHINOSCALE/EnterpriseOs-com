@@ -26,20 +26,22 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
       kpiScore = list.reduce((s, k) => s + Math.min(1.0, k.value / k.target), 0) / list.length;
   }
 
-  // Project score — 25%
+  // Project score — 25%: status-weighted progress (not binary done/not-done)
   let projectScore = null;
   const deptProjects = projects[deptId] || [];
   if (deptProjects.length > 0) {
-    projectScore = deptProjects.filter(p => p.status === "done").length / deptProjects.length;
+    const PW = { done: 1.0, review: 0.75, doing: 0.5, todo: 0.25, backlog: 0.0 };
+    projectScore = deptProjects.reduce((s, p) => s + (PW[p.status] ?? 0.5), 0) / deptProjects.length;
   }
 
-  // Task score — 15%
+  // Task score — 15%: status-weighted, using department field (not just project_id)
   let taskScore = null;
-  if (tasks && deptProjects.length > 0) {
-    const pids = new Set(deptProjects.map(p => p.id));
-    const deptTasks = tasks.filter(t => pids.has(t.project_id));
-    if (deptTasks.length > 0)
-      taskScore = deptTasks.filter(t => t.status === "completed").length / deptTasks.length;
+  if (tasks) {
+    const deptTasks = tasks.filter(t => t.department === deptId);
+    if (deptTasks.length > 0) {
+      const TW = { completed: 1.0, in_progress: 0.5, pending: 0.1, blocked: 0.0 };
+      taskScore = deptTasks.reduce((s, t) => s + (TW[t.status] ?? 0.1), 0) / deptTasks.length;
+    }
   }
 
   // POA score — 10%
@@ -80,15 +82,16 @@ function computeKpiScore(deptId, kpis, kpiWeekly, curYear, curQuarter) {
   return 0;
 }
 
-// Projects+Tasks score (0-100): projects 62.5%, tasks 37.5% (normalised within that bucket)
+// Projects+Tasks score (0-100): status-weighted progress
 function computeProjectScore(deptId, projects, tasks) {
   const deptProjects = projects[deptId] || [];
   if (!deptProjects.length) return 0;
-  const projRatio = deptProjects.filter(p => p.status === "done").length / deptProjects.length;
-  const pids = new Set(deptProjects.map(p => p.id));
-  const deptTasks = (tasks || []).filter(t => pids.has(t.project_id));
+  const PW = { done: 1.0, review: 0.75, doing: 0.5, todo: 0.25, backlog: 0.0 };
+  const projRatio = deptProjects.reduce((s, p) => s + (PW[p.status] ?? 0.5), 0) / deptProjects.length;
+  const deptTasks = (tasks || []).filter(t => t.department === deptId);
   if (!deptTasks.length) return Math.min(100, Math.round(projRatio * 100));
-  const taskRatio = deptTasks.filter(t => t.status === "completed").length / deptTasks.length;
+  const TW = { completed: 1.0, in_progress: 0.5, pending: 0.1, blocked: 0.0 };
+  const taskRatio = deptTasks.reduce((s, t) => s + (TW[t.status] ?? 0.1), 0) / deptTasks.length;
   return Math.min(100, Math.round((projRatio * 0.625 + taskRatio * 0.375) * 100));
 }
 
@@ -172,9 +175,8 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
       } else {
         critical = (kpis[d.id] || []).filter(k => k.value / k.target < 0.5).length;
       }
-      const open = (projects[d.id] || []).filter(p => p.status !== "done").length;
-      const pids = new Set((projects[d.id] || []).map(p => p.id));
-      const taskCount = (tasks || []).filter(t => pids.has(t.project_id)).length;
+      const open = (projects[d.id] || []).length;
+      const taskCount = (tasks || []).filter(t => t.department === d.id).length;
       return { ...d, score, open, tasks: taskCount, critical };
     });
   }, [kpis, kpiWeekly, projects, tasks, poa, departments, selYear, selQuarter]);
@@ -189,6 +191,14 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
   const collaborators = (kpis.rh || []).find(k => k.id === "head")?.value || 184;
 
   const avgScore = Math.min(100, Math.round(deptScores.reduce((s,d) => s + d.score, 0) / deptScores.length));
+  const avgKpiScore  = useMemo(() => {
+    const deptList = departments && departments.length > 0 ? departments : D.DEPARTMENTS;
+    return Math.min(100, Math.round(deptList.reduce((s, d) => s + computeKpiScore(d.id, kpis, kpiWeekly, selYear, selQuarter), 0) / deptList.length));
+  }, [kpis, kpiWeekly, departments, selYear, selQuarter]);
+  const avgProjScore = useMemo(() => {
+    const deptList = departments && departments.length > 0 ? departments : D.DEPARTMENTS;
+    return Math.min(100, Math.round(deptList.reduce((s, d) => s + computeProjectScore(d.id, projects, tasks), 0) / deptList.length));
+  }, [projects, tasks, departments]);
 
   // Trend lines — three series (Proyectos, KPIs, Tareas)
   const trendData = useMemo(() => ({
@@ -246,11 +256,49 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly,
         </div>
       )}
 
-      {/* KPI strip — Score Global hero + 4 metric cards */}
+      {/* KPI strip — Score Global KPI + Score Global Proyectos + 3 metrics */}
       <div className="row row--5" style={{marginBottom: 14}}>
-        <ScoreGlobalCard score={avgScore} deptCount={deptScores.length} curQuarter={curQuarter} curYear={curYear}/>
-        <MetricCard label="Proyectos Activos" value={totalProjects} sub={`${totalRisk} en riesgo`} delta={+4} deltaLabel="vs mes ant." icon="folder"/>
-        <MetricCard label="Tareas Pendientes" value={totalTasks} sub="" delta={-12} deltaLabel="esta semana" icon="checkbox" deltaIsBad={false}/>
+        <div className="kpi kpi--hero" style={{background: "linear-gradient(135deg, #2563eb, #1d4ed8)", boxShadow: "0 8px 24px -8px #2563eb80"}}>
+          <div className="kpi__top">
+            <div className="kpi__label">Score Global KPI</div>
+            <div className="kpi__ic">{curYear}</div>
+          </div>
+          <div className="kpi__progress" style={{marginTop: 4}}>
+            <svg className="kpi__ring" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="6"/>
+              <circle cx="32" cy="32" r="28" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={2 * Math.PI * 28} strokeDashoffset={2 * Math.PI * 28 * (1 - avgKpiScore / 100)}
+                transform="rotate(-90 32 32)" style={{transition: "stroke-dashoffset .8s"}}/>
+              <text x="32" y="36" textAnchor="middle" fontSize="14" fontWeight="700" fill="#fff" fontFamily="var(--ff-ui)">{avgKpiScore}</text>
+            </svg>
+            <div>
+              <div className="kpi__value" style={{margin: 0, fontSize: 28}}>{avgKpiScore}%</div>
+              <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Indicadores globales</div>
+              <div className="kpi__sub" style={{marginLeft: 0, fontSize: 11, marginTop: 4, opacity: 0.85}}>Promedio({deptScores.length} deptos) · Q{selQuarter} {selYear}</div>
+            </div>
+          </div>
+        </div>
+        <div className="kpi kpi--hero" style={{background: "linear-gradient(135deg, #059669, #047857)", boxShadow: "0 8px 24px -8px #05966980"}}>
+          <div className="kpi__top">
+            <div className="kpi__label">Score Global Proyectos</div>
+            <div className="kpi__ic">{curYear}</div>
+          </div>
+          <div className="kpi__progress" style={{marginTop: 4}}>
+            <svg className="kpi__ring" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="6"/>
+              <circle cx="32" cy="32" r="28" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={2 * Math.PI * 28} strokeDashoffset={2 * Math.PI * 28 * (1 - avgProjScore / 100)}
+                transform="rotate(-90 32 32)" style={{transition: "stroke-dashoffset .8s"}}/>
+              <text x="32" y="36" textAnchor="middle" fontSize="14" fontWeight="700" fill="#fff" fontFamily="var(--ff-ui)">{avgProjScore}</text>
+            </svg>
+            <div>
+              <div className="kpi__value" style={{margin: 0, fontSize: 28}}>{avgProjScore}%</div>
+              <div className="kpi__sub" style={{marginLeft: 0, fontSize: 12}}>Proyectos + Tareas</div>
+              <div className="kpi__sub" style={{marginLeft: 0, fontSize: 11, marginTop: 4, opacity: 0.85}}>Ponderado por avance · {deptScores.length} deptos</div>
+            </div>
+          </div>
+        </div>
+        <MetricCard label="Proyectos Totales" value={Object.values(projects).flat().length} sub={`${totalProjects} activos · ${totalRisk} en riesgo`} delta={+4} deltaLabel="vs mes ant." icon="folder"/>
         <MetricCard label="KPIs en Rojo" value={kpisRed} sub="" delta={0} deltaLabel="Sin cambio" icon="warn" valueColor={kpisRed > 0 ? "var(--danger)" : "var(--text)"}/>
         <MetricCard label="Colaboradores" value={collaborators} sub="" delta={+5} deltaLabel="este mes" icon="users2"/>
       </div>
@@ -391,7 +439,7 @@ function DeptPerfRow({ d, onClick }) {
       <div className="deptperf__meta">
         <span><span className="v">{d.open}</span><span className="l">Proyectos</span></span>
         <span><span className="v">{d.tasks}</span><span className="l">Tareas</span></span>
-        <span><span className="v" style={{color: d.critical > 0 ? "var(--danger)" : "var(--text)"}}>{d.critical}</span><span className="l">KPIs Crít.</span></span>
+        <span><span className="v" style={{color: d.critical > 0 ? "var(--danger)" : "var(--positive)"}}>{d.critical}</span><span className="l">KPIs Crít.</span></span>
       </div>
       <div className="deptperf__status">
         <span className={"chip " + status.cls}><span className="dot"/>{status.lbl}</span>
