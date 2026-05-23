@@ -361,10 +361,10 @@ function ArtPanel() {
     <div className="auth__art">
       <div className="auth__grid" />
       <div className="auth__brand">
-        <div className="auth__logo">I</div>
+        <div className="auth__logo">R</div>
         <div>
-          <div>INDISA</div>
-          <div className="auth__tag">Enterprise OS · v2.4 · build 2026.05</div>
+          <div>RHINOSCALE</div>
+          <div className="auth__tag">INDISA · v2.4 · build 2026.05</div>
         </div>
       </div>
       <div className="auth__hero">
