@@ -344,8 +344,16 @@ function Timeline({ items, onOpen }) {
       {/* Header */}
       <div style={{display: "grid", gridTemplateColumns: `300px 1fr`, gap: 0, position: "relative", minWidth: 760}}>
         <div className="dim" style={{fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600, paddingBottom: 8}}>Proyecto</div>
-        <div style={{position: "relative", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderBottom: "1px solid var(--line)", paddingBottom: 6, marginBottom: 6}}>
-          {Array.from({length: 4}, (_, i) => new Date(_tnow.getFullYear(), _tnow.getMonth() + i, 1).toLocaleDateString("es-CO", {month: "long"})).map(m => <div key={m} className="dim mono" style={{fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: ".06em"}}>{m}</div>)}
+        <div style={{position: "relative", height: 22, borderBottom: "1px solid var(--line)", marginBottom: 6}}>
+          {Array.from({length: 4}, (_, i) => {
+            const mStart = new Date(_tnow.getFullYear(), _tnow.getMonth() + i, 1);
+            const pct = ((mStart - start) / 86400000) / total * 100;
+            return (
+              <div key={i} className="dim mono" style={{position: "absolute", left: `${pct}%`, fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", whiteSpace: "nowrap", lineHeight: "22px"}}>
+                {mStart.toLocaleDateString("es-CO", {month: "long"})}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -358,8 +366,10 @@ function Timeline({ items, onOpen }) {
       }).map(p => {
         const dueDate = new Date(p.due);
         const sd = new Date(dueDate); sd.setDate(sd.getDate() - 30);
-        const left = Math.max(0, ((sd - start) / 86400000) / total * 100);
-        const width = Math.max(3, ((dueDate - sd) / 86400000) / total * 100);
+        const rawLeft = ((sd - start) / 86400000) / total * 100;
+        const rawRight = ((dueDate - start) / 86400000) / total * 100;
+        const left = Math.max(0, rawLeft);
+        const width = Math.max(3, Math.min(100, rawRight) - left);
         const st = statusMap[p.status] || statusMap.todo;
         const pr = prioMap[p.prio] || prioMap.med;
         const dept = D.DEPT_BY_ID[p.dept];
