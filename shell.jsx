@@ -16,10 +16,10 @@ function Shell({ session, view, setView, deptScope, setDeptScope, theme, setThem
     <div className="shell">
       <aside className="sidebar">
         <div className="sb__brand">
-          <div className="sb__logo">I</div>
+          <div className="sb__logo">R</div>
           <div>
-            <div className="sb__name">INDISA</div>
-            <div className="sb__role">Enterprise OS</div>
+            <div className="sb__name">RHINOSCALE</div>
+            <div className="sb__role">INDISA</div>
           </div>
         </div>
 
