@@ -86,9 +86,14 @@ function usePersistentState(key, initial) {
 
 function App() {
   const D = window.INDISA_DATA;
-  // Session — persisted to localStorage so refresh keeps the user logged in
+  // Session — persisted to localStorage so refresh keeps the user logged in.
+  // indisa_logged_out flag prevents auto-restore after explicit logout.
   const [session, setSession] = uS(() => {
-    try { const r = localStorage.getItem("indisa_session"); return r ? JSON.parse(r) : null; } catch { return null; }
+    try {
+      if (localStorage.getItem("indisa_logged_out")) return null;
+      const r = localStorage.getItem("indisa_session");
+      return r ? JSON.parse(r) : null;
+    } catch { return null; }
   });
   uE(() => {
     try {
@@ -161,9 +166,10 @@ function App() {
         allProfiles.forEach(p => { profileMap[p.email.toLowerCase()] = p; });
         setUsers(profileMap);
       }
-      // Restore existing session on page load / refresh
+      // Restore existing session on page load / refresh — skip if user explicitly logged out
       const existingSession = await window.SUPABASE_AUTH.getSession();
-      if (!cancelled && existingSession?.user) {
+      const wasLoggedOut = localStorage.getItem("indisa_logged_out");
+      if (!cancelled && existingSession?.user && !wasLoggedOut) {
         const profile = await window.SUPABASE_AUTH.loadProfileById(existingSession.user.id);
         if (!cancelled && profile) {
           setSession({ email: profile.email, ...profile });
@@ -195,6 +201,7 @@ function App() {
   }
 
   function login(s, codeUsed) {
+    try { localStorage.removeItem("indisa_logged_out"); } catch {}
     setSession(s);
     if (codeUsed) {
       // First-time login with code: register user and increment uses
@@ -216,6 +223,8 @@ function App() {
 
   function logout() {
     addAudit({ action: "Cierre de sesión", user: session.name, dept: session.dept, level: "info" });
+    try { localStorage.setItem("indisa_logged_out", "1"); } catch {}
+    try { window.SUPABASE_AUTH?.signOut?.(); } catch {}
     setSession(null);
   }
 
