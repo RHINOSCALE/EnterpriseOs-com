@@ -280,13 +280,38 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
   const checks = t.checklist.length;
   const done = t.checklist.filter(c => c.done).length;
 
+  // Find linked project
+  const linkedProject = useMemo(() => {
+    if (!t.project_id) return null;
+    return Object.values(projects || {}).flat().find(p => p.id === t.project_id) || null;
+  }, [t.project_id, projects]);
+
+  // Auto-update status based on checklist progress
+  const checklistKey = t.checklist.map(c => `${c.id}:${c.done}`).join(",");
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    if (!t.checklist.length) return;
+    const total = t.checklist.length;
+    const doneCount = t.checklist.filter(c => c.done).length;
+    const newStatus = doneCount === total ? "completed" : doneCount > 0 ? "in_progress" : "pending";
+    if (newStatus !== t.status) onSave({ status: newStatus });
+  }, [checklistKey]);
+
+  const statusInfo = TASK_STATUS.find(s => s.id === t.status);
+
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" style={{width: 640}} onClick={e => e.stopPropagation()}>
         <div className="modal__hd">
           <div className="flex-c gap-8">
-            <span className={"chip " + TASK_STATUS.find(s => s.id === t.status)?.chip}><span className="dot"/>{TASK_STATUS.find(s => s.id === t.status)?.label}</span>
+            <span className={"chip " + statusInfo?.chip}><span className="dot"/>{statusInfo?.label}</span>
             <span className="dim mono" style={{fontSize: 11}}>{t.id} · {D.DEPT_BY_ID[t.department]?.short}</span>
+            {linkedProject && (
+              <span className="chip chip--accent" style={{fontSize: 10, gap: 4}}>
+                <Icon name="board" size={10}/> {linkedProject.title}
+              </span>
+            )}
           </div>
           <div className="flex-c gap-6">
             {readOnly && <span className="chip"><Icon name="lock" size={11}/> Solo lectura</span>}
@@ -296,6 +321,13 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
         </div>
         <div className="modal__bd">
           <input className="input" style={{fontSize: 16, fontWeight: 500, padding: "8px 10px"}} value={title} onChange={e => setTitle(e.target.value)} onBlur={() => onSave({ title })} disabled={readOnly}/>
+          {linkedProject && (
+            <div className="flex-c gap-6" style={{marginTop: 8, padding: "6px 10px", borderRadius: 6, background: "var(--accent-soft)", border: "1px solid var(--accent-line)"}}>
+              <Icon name="board" size={12} style={{color: "var(--accent)"}}/>
+              <span style={{fontSize: 12, color: "var(--accent)", fontWeight: 500}}>Proyecto: {linkedProject.title}</span>
+              <span className="dim mono" style={{fontSize: 10}}>· {D.DEPT_BY_ID[linkedProject.dept]?.short}</span>
+            </div>
+          )}
           <textarea className="textarea input" style={{marginTop: 10, minHeight: 60, resize: "vertical"}} placeholder="Descripción (opcional)" value={desc} onChange={e => setDesc(e.target.value)} onBlur={() => onSave({ description: desc })} disabled={readOnly}/>
           <div className="row row--3" style={{marginTop: 14}}>
             <div className="field">
@@ -309,7 +341,7 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
               <input className="input mono" type="date" value={due} onChange={e => { setDue(e.target.value); onSave({ due_date: e.target.value }); }} disabled={readOnly}/>
             </div>
             <div className="field">
-              <label>Estado</label>
+              <label>Estado {checks > 0 && <span className="dim" style={{fontSize: 10, fontWeight: 400}}>(auto)</span>}</label>
               <select className="select" value={t.status} onChange={e => onSave({ status: e.target.value })} disabled={readOnly}>
                 {TASK_STATUS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
@@ -324,7 +356,7 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
             <div className="dim" style={{fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em"}}>Checklist · {done}/{checks}</div>
             {checks > 0 && (
               <div className="deptperf__bar" style={{flex: 1, marginLeft: 12, maxWidth: 200}}>
-                <span style={{width: (checks ? done/checks*100 : 0) + "%", background: "var(--positive)"}}/>
+                <span style={{width: (checks ? done/checks*100 : 0) + "%", background: "var(--positive)", transition: "width .3s ease"}}/>
               </div>
             )}
           </div>
