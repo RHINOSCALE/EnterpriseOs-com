@@ -43,14 +43,11 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   }
 
   // POA score — 10%
+  // poa is keyed by deptId: { gg: [goals...], ing: [goals...], ... }
   let poaScore = null;
-  if (poa && poa.length > 0) {
-    const deptPoa = poa.filter(g =>
-      (g.deptIds && g.deptIds.includes(deptId)) || g.dept === deptId
-    );
-    if (deptPoa.length > 0)
-      poaScore = deptPoa.filter(g => g.status === "done" || g.status === "completed").length / deptPoa.length;
-  }
+  const deptPoaList = poa ? (poa[deptId] || []) : [];
+  if (deptPoaList.length > 0)
+    poaScore = deptPoaList.filter(g => g.progress === 100).length / deptPoaList.length;
 
   // Weighted average — redistribute weights among components that have real data
   const components = [
@@ -65,7 +62,7 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   return Math.min(100, Math.round(active.reduce((s, c) => s + c.score * (c.weight / totalW), 0) * 100));
 }
 
-function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tasks, poa, addAudit, showToast, setView }) {
+function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tasks, poa, departments, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const effDept = role === "owner" ? deptScope : session.dept;
@@ -75,6 +72,20 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tas
   const curQuarter = Math.ceil((_now.getMonth() + 1) / 3);
   const [period, setPeriod] = useState(() => `${MONTH_ES[_now.getMonth()]} ${curYear}`);
   const [periodOpen, setPeriodOpen] = useState(false);
+
+  // Parse the selected period into a concrete year + quarter so score data follows it
+  const [selYear, selQuarter] = useMemo(() => {
+    const qm = period.match(/^Q(\d)\s+(\d{4})$/);
+    if (qm) return [parseInt(qm[2]), parseInt(qm[1])];
+    const ytdm = period.match(/^YTD\s+(\d{4})$/);
+    if (ytdm) return [parseInt(ytdm[1]), curQuarter];
+    const mm = period.match(/^(\S+)\s+(\d{4})$/);
+    if (mm) {
+      const mi = MONTH_ES.indexOf(mm[1]);
+      if (mi >= 0) return [parseInt(mm[2]), Math.ceil((mi + 1) / 3)];
+    }
+    return [curYear, curQuarter];
+  }, [period, curYear, curQuarter]);
 
   function exportReport(deptScores, avgScore, totalProjects, totalTasks, kpisRed) {
     const lines = [
@@ -106,12 +117,12 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tas
     showToast(`Reporte ${period} descargado`);
   }
 
-  // Compute department health scores using the weighted multi-factor formula
+  // Compute department health scores — driven by selYear/selQuarter so period picker affects data
   const deptScores = useMemo(() => {
-    return D.DEPARTMENTS.map(d => {
-      const score = computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, curYear, curQuarter);
-      // Critical KPI count (separate from score — used for display only)
-      const key = `${d.id}_${curYear}_${curQuarter}`;
+    const deptList = departments && departments.length > 0 ? departments : D.DEPARTMENTS;
+    return deptList.map(d => {
+      const score = computeDeptScore(d.id, kpis, kpiWeekly, projects, tasks, poa, selYear, selQuarter);
+      const key = `${d.id}_${selYear}_${selQuarter}`;
       const weeklyList = (kpiWeekly || {})[key] || [];
       let critical;
       if (weeklyList.length > 0) {
@@ -128,7 +139,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tas
       const taskCount = (tasks || []).filter(t => pids.has(t.project_id)).length;
       return { ...d, score, open, tasks: taskCount, critical };
     });
-  }, [kpis, kpiWeekly, projects, tasks, poa]);
+  }, [kpis, kpiWeekly, projects, tasks, poa, departments, selYear, selQuarter]);
 
   const atRisk = deptScores.filter(d => d.score < 75);
 
