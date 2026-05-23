@@ -90,14 +90,20 @@ function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
     setDeleteGoal(null);
   }
 
-  function addGoal(deptId, title, type) {
-    const id = "g" + Math.random().toString(36).slice(2,6);
-    setPoa(prev => ({ ...prev, [deptId]: [...(prev[deptId] || []), {
-      id, type: type || "quarterly", title, owner: session.name, progress: 0, q: [0,0,0,0],
-      objectives: [{ id: "o1", text: "Primer objetivo", done: false }],
-    }]}));
-    addAudit({ action: `Meta POA creada · ${title}`, user: session.name, dept: deptId, level: "success" });
-    showToast("Meta agregada");
+  function addGoal(deptIds, title, type) {
+    setPoa(prev => {
+      const out = { ...prev };
+      deptIds.forEach(deptId => {
+        const id = "g" + Math.random().toString(36).slice(2, 6);
+        out[deptId] = [...(out[deptId] || []), {
+          id, type: type || "quarterly", title, owner: session.name, progress: 0, q: [0,0,0,0],
+          objectives: [{ id: "o1", text: "Primer objetivo", done: false }],
+        }];
+      });
+      return out;
+    });
+    addAudit({ action: `Meta POA creada · ${title}`, user: session.name, dept: deptIds[0] || "gg", level: "success" });
+    showToast(deptIds.length > 1 ? `Meta agregada a ${deptIds.length} departamentos` : "Meta agregada");
     setAddingGoal(false);
   }
 
@@ -303,9 +309,28 @@ function POAPage({ session, deptScope, poa, setPoa, addAudit, showToast }) {
 
 function NewGoalModal({ effDept, onClose, onAdd }) {
   const D = window.INDISA_DATA;
-  const [dept, setDept] = useState(effDept || "gg");
   const [title, setTitle] = useState("");
   const [type, setType] = useState("quarterly");
+  const [depts, setDepts] = useState(effDept ? [effDept] : []);
+
+  const isBhag = type === "bhag";
+
+  function toggleDept(id) {
+    setDepts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  function handleTypeChange(k) {
+    setType(k);
+    if (k === "bhag") setDepts(["gg"]);
+    else if (!effDept) setDepts([]);
+  }
+
+  const canSubmit = title.trim() && (isBhag || effDept || depts.length > 0);
+
+  function submit() {
+    if (!canSubmit) return;
+    onAdd(isBhag ? ["gg"] : effDept ? [effDept] : depts, title.trim(), type);
+  }
 
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -315,14 +340,16 @@ function NewGoalModal({ effDept, onClose, onAdd }) {
           <button className="iconbtn" onClick={onClose}><span className="ic"><Icon name="x" size={14}/></span></button>
         </div>
         <div className="modal__bd">
+          {/* Type selector */}
           <div className="field">
             <label>Tipo de meta (Scaling Up)</label>
             <div style={{display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8}}>
               {Object.entries(D.POA_TYPES).map(([k,v]) => (
-                <div key={k} onClick={() => setType(k)} style={{
+                <div key={k} onClick={() => handleTypeChange(k)} style={{
                   padding: 10, borderRadius: 8, cursor: "pointer",
                   border: "1px solid " + (type === k ? v.color : "var(--line)"),
                   background: type === k ? v.color + "12" : "var(--bg-1)",
+                  transition: "all .15s",
                 }}>
                   <div style={{fontSize: 11, fontWeight: 600, color: v.color, textTransform: "uppercase", letterSpacing: ".06em"}}>{v.label}</div>
                   <div className="dim" style={{fontSize: 11, marginTop: 2}}>{v.sub}</div>
@@ -330,23 +357,67 @@ function NewGoalModal({ effDept, onClose, onAdd }) {
               ))}
             </div>
           </div>
-          {!effDept && (
+
+          {/* BHAG — empresa completa, sin selector */}
+          {isBhag && (
             <div className="field">
-              <label>Departamento</label>
-              <select className="select" value={dept} onChange={e => setDept(e.target.value)}>
-                {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <div style={{padding: "10px 14px", borderRadius: 8, background: "var(--accent-soft)", border: "1px solid var(--accent-line)", display: "flex", alignItems: "center", gap: 10}}>
+                <span style={{fontSize: 18}}>🎯</span>
+                <div>
+                  <div style={{fontSize: 13, fontWeight: 600, color: "var(--accent)"}}>Meta única para toda la empresa</div>
+                  <div className="dim" style={{fontSize: 11, marginTop: 2}}>El BHAG aplica a la organización completa, sin departamento específico.</div>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Multi-dept selector para Anual / Trimestral / Rock */}
+          {!isBhag && !effDept && (
+            <div className="field">
+              <label>Departamentos <span className="dim" style={{fontWeight: 400, fontSize: 11}}>— selecciona uno o varios</span></label>
+              <div style={{display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4}}>
+                {D.DEPARTMENTS.map(d => {
+                  const sel = depts.includes(d.id);
+                  return (
+                    <div key={d.id} onClick={() => toggleDept(d.id)} style={{
+                      padding: "5px 11px", borderRadius: 6, cursor: "pointer",
+                      fontSize: 12, fontWeight: 500,
+                      border: "1px solid " + (sel ? d.color : "var(--line)"),
+                      background: sel ? d.color + "15" : "var(--bg-1)",
+                      color: sel ? d.color : "var(--text-2)",
+                      transition: "all .12s",
+                      userSelect: "none",
+                    }}>
+                      {d.name}
+                    </div>
+                  );
+                })}
+              </div>
+              {depts.length === 0 && (
+                <div className="dim" style={{fontSize: 11, marginTop: 6, color: "var(--warning)"}}>Selecciona al menos un departamento</div>
+              )}
+              {depts.length > 1 && (
+                <div className="dim" style={{fontSize: 11, marginTop: 6}}>
+                  Se creará una meta en cada departamento seleccionado ({depts.length})
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Title */}
           <div className="field">
             <label>Título de la meta</label>
-            <input className="input" placeholder="Ej. Alcanzar $30M de ingresos anuales" value={title} onChange={e => setTitle(e.target.value)} autoFocus/>
+            <input className="input" placeholder="Ej. Alcanzar $30M de ingresos anuales"
+              value={title} onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()} autoFocus/>
           </div>
-          <div className="dim" style={{fontSize: 12, marginTop: 8}}>Se creará con un objetivo inicial. Podrás editarlo directamente en el POA.</div>
+          <div className="dim" style={{fontSize: 12, marginTop: 8}}>
+            Se creará con un objetivo inicial. Podrás editarlo directamente en el POA.
+          </div>
         </div>
         <div className="modal__ft">
           <button className="btn btn--ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn btn--primary" disabled={!title.trim()} onClick={() => onAdd(dept, title.trim(), type)} style={{opacity: !title.trim() ? 0.5 : 1}}>
+          <button className="btn btn--primary" disabled={!canSubmit} onClick={submit} style={{opacity: !canSubmit ? 0.5 : 1}}>
             <Icon name="plus" size={14}/> Crear meta
           </button>
         </div>
