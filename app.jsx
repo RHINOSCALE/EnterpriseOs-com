@@ -85,6 +85,27 @@ function App() {
 
   uE(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
+  // Auto-sync project status from linked tasks (always active, not just when modal is open)
+  uE(() => {
+    setProjects(prev => {
+      let changed = false;
+      const out = {};
+      for (const dept of Object.keys(prev)) {
+        out[dept] = prev[dept].map(p => {
+          const pts = tasks.filter(t => t.project_id === p.id);
+          if (!pts.length) return p;
+          const comp = pts.filter(t => t.status === "completed").length;
+          const auto = comp === pts.length ? "done"
+            : pts.every(t => t.status === "pending") ? "todo"
+            : "doing";
+          if (auto !== p.status) { changed = true; return { ...p, status: auto }; }
+          return p;
+        });
+      }
+      return changed ? out : prev;
+    });
+  }, [tasks]);
+
   // Expose scope-switcher to nested components
   uE(() => { window.__indisaScopeTo = (d) => { setDeptScope(d); setView("dashboard"); }; }, []);
 

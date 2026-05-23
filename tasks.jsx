@@ -42,11 +42,16 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
     setTasks(prev => prev.map(t => t.id === tid ? { ...t, ...patch } : t));
   }
 
-  function toggleChecklist(tid, cid) {
+  function toggleChecklistAndStatus(tid, cid) {
     setTasks(prev => prev.map(t => {
       if (t.id !== tid) return t;
       const checklist = t.checklist.map(c => c.id === cid ? { ...c, done: !c.done } : c);
-      return { ...t, checklist };
+      if (!checklist.length) return { ...t, checklist };
+      const doneCount = checklist.filter(c => c.done).length;
+      const status = doneCount === checklist.length ? "completed"
+        : doneCount > 0 ? "in_progress"
+        : "pending";
+      return { ...t, checklist, status };
     }));
   }
 
@@ -246,7 +251,18 @@ function TasksPage({ session, deptScope, tasks, setTasks, projects, addAudit, sh
 
       {open && <TaskModal t={open} projects={projects} readOnly={readOnly} onClose={() => setOpen(null)}
         onSave={(patch) => { if (readOnly) return; updateTask(open.id, patch); setOpen({...open, ...patch}); }}
-        onToggle={(cid) => { if (readOnly) return; toggleChecklist(open.id, cid); setOpen(prev => ({...prev, checklist: prev.checklist.map(c => c.id === cid ? {...c, done: !c.done} : c)})); }}
+        onToggle={(cid) => {
+          if (readOnly) return;
+          toggleChecklistAndStatus(open.id, cid);
+          setOpen(prev => {
+            const checklist = prev.checklist.map(c => c.id === cid ? {...c, done: !c.done} : c);
+            const doneCount = checklist.filter(c => c.done).length;
+            const status = checklist.length
+              ? (doneCount === checklist.length ? "completed" : doneCount > 0 ? "in_progress" : "pending")
+              : prev.status;
+            return {...prev, checklist, status};
+          });
+        }}
         onAddCheck={(text) => { if (readOnly) return; addChecklist(open.id, text); setOpen(prev => ({...prev, checklist: [...prev.checklist, {id:"c"+Math.random().toString(36).slice(2,5), text, done: false}]})); }}
         onRemoveCheck={(cid) => { if (readOnly) return; removeChecklist(open.id, cid); setOpen(prev => ({...prev, checklist: prev.checklist.filter(c => c.id !== cid)})); }}
         onDelete={() => { setDeleteId(open.id); setOpen(null); }}/>}
@@ -285,18 +301,6 @@ function TaskModal({ t, projects, onClose, onSave, onToggle, onAddCheck, onRemov
     if (!t.project_id) return null;
     return Object.values(projects || {}).flat().find(p => p.id === t.project_id) || null;
   }, [t.project_id, projects]);
-
-  // Auto-update status based on checklist progress
-  const checklistKey = t.checklist.map(c => `${c.id}:${c.done}`).join(",");
-  const mountedRef = useRef(false);
-  useEffect(() => {
-    if (!mountedRef.current) { mountedRef.current = true; return; }
-    if (!t.checklist.length) return;
-    const total = t.checklist.length;
-    const doneCount = t.checklist.filter(c => c.done).length;
-    const newStatus = doneCount === total ? "completed" : doneCount > 0 ? "in_progress" : "pending";
-    if (newStatus !== t.status) onSave({ status: newStatus });
-  }, [checklistKey]);
 
   const statusInfo = TASK_STATUS.find(s => s.id === t.status);
 
