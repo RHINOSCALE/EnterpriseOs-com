@@ -1,7 +1,7 @@
 // INDISA Enterprise OS — App router
-const { useState: uS, useEffect: uE, useMemo: uM } = React;
+const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
 
-// Persistent state hook — syncs with localStorage and, when configured, saves data to Supabase.
+// Persistent state hook — syncs with localStorage, Supabase, and Supabase Realtime.
 const LS_PREFIX = "indisa_v1_";
 function usePersistentState(key, initial) {
   const [value, setValue] = uS(() => {
@@ -12,11 +12,15 @@ function usePersistentState(key, initial) {
     return initial;
   });
   const [supabaseLoaded, setSupabaseLoaded] = uS(false);
+  // Tracks the last value WE saved so realtime doesn't echo it back to us.
+  const lastSavedRef = uR(undefined);
 
+  // Sync to localStorage on every change
   uE(() => {
     try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)); } catch (e) {}
   }, [key, value]);
 
+  // Load from Supabase once on mount
   uE(() => {
     let cancelled = false;
     async function loadRemote() {
@@ -40,14 +44,42 @@ function usePersistentState(key, initial) {
     return () => { cancelled = true; };
   }, [key, initial]);
 
+  // Save to Supabase whenever value changes (after initial load)
   uE(() => {
     if (!supabaseLoaded) return;
     const state = window.SUPABASE_STATE;
     if (!state || !window.SUPABASE?.client) return;
+    lastSavedRef.current = value; // mark as our own save before sending
     state.save(key, value).catch((error) => {
       console.warn("Supabase state save failed for", key, error);
     });
   }, [key, value, supabaseLoaded]);
+
+  // Supabase Realtime — receive changes from other users without refresh
+  uE(() => {
+    if (!supabaseLoaded || !window.SUPABASE?.client) return;
+    const client = window.SUPABASE.client;
+    const channel = client
+      .channel(`indisa_rt_${key}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'app_state',
+        filter: `key=eq.${key}`,
+      }, (payload) => {
+        const incoming = payload.new?.value;
+        if (incoming === undefined || incoming === null) return;
+        // Skip our own saves — compare serialized to avoid false positives
+        if (JSON.stringify(incoming) === JSON.stringify(lastSavedRef.current)) return;
+        setValue(incoming);
+      })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn(`Realtime channel error for key: ${key}`);
+        }
+      });
+    return () => { client.removeChannel(channel); };
+  }, [key, supabaseLoaded]);
 
   return [value, setValue];
 }
