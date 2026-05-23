@@ -244,7 +244,7 @@ function App() {
       searchData={{ kpis, projects, tasks, users, poa, files }}
       audit={audit}
     >
-      {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} poa={poa} departments={departments} addAudit={addAudit} showToast={showToast} setView={setView}/>}
+      {effView === "dashboard" && <Dashboard session={session} deptScope={deptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} projects={projects} tasks={tasks} poa={poa} departments={departments} addAudit={addAudit} showToast={showToast} setView={setView}/>}
       {effView === "kpis" && <KPIPage session={session} deptScope={deptScope} setDeptScope={setDeptScope} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} addAudit={addAudit} showToast={showToast}/>}
       {effView === "projects" && <ProjectsPage session={session} deptScope={deptScope} projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} addAudit={addAudit} showToast={showToast}/>}
       {effView === "tasks" && <TasksPage session={session} deptScope={deptScope} tasks={tasks} setTasks={setTasks} projects={projects} addAudit={addAudit} showToast={showToast}/>}

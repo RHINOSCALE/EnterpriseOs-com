@@ -62,7 +62,7 @@ function computeDeptScore(deptId, kpis, kpiWeekly, projects, tasks, poa, curYear
   return Math.min(100, Math.round(active.reduce((s, c) => s + c.score * (c.weight / totalW), 0) * 100));
 }
 
-function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tasks, poa, departments, addAudit, showToast, setView }) {
+function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, setKpiWeekly, projects, tasks, poa, departments, addAudit, showToast, setView }) {
   const D = window.INDISA_DATA;
   const role = session.role;
   const effDept = role === "owner" ? deptScope : session.dept;
@@ -170,7 +170,7 @@ function Dashboard({ session, deptScope, kpis, setKpis, kpiWeekly, projects, tas
 
   // === Render: Dept-scoped (drilled into a department) ===
   if (effDept) {
-    return <DeptDashboard dept={D.DEPT_BY_ID[effDept]} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} projects={projects} tasks={tasks} poa={poa} session={session} addAudit={addAudit} showToast={showToast} setView={setView}/>;
+    return <DeptDashboard dept={D.DEPT_BY_ID[effDept]} kpis={kpis} setKpis={setKpis} kpiWeekly={kpiWeekly} setKpiWeekly={setKpiWeekly} projects={projects} tasks={tasks} poa={poa} session={session} addAudit={addAudit} showToast={showToast} setView={setView}/>;
   }
 
   // === Render: Executive overview (Owner all-departments) ===
@@ -363,13 +363,61 @@ function DeptPerfRow({ d, onClick }) {
 }
 
 // ===== Department-scoped dashboard =====
-function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, projects, tasks, poa, session, addAudit, showToast, setView }) {
+function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, setKpiWeekly, projects, tasks, poa, session, addAudit, showToast, setView }) {
   const readOnly = session.role === "viewer";
   const PALETTE = ["var(--accent)","var(--positive)","var(--warning)","#8b5cf6","#0ea5e9","#ec4899","#14b8a6","#f97316","#ef4444","#6366f1"];
   const list = kpis[dept.id] || [];
   const ps = projects[dept.id] || [];
   const _now = new Date();
   const score = computeDeptScore(dept.id, kpis, kpiWeekly, projects, tasks, poa, _now.getFullYear(), Math.ceil((_now.getMonth() + 1) / 3));
+
+  // Weekly KPI helpers
+  const dYear = _now.getFullYear();
+  const dQuarter = Math.ceil((_now.getMonth() + 1) / 3);
+  const Q_LABELS_D = ["1ER","2DO","3ER","4TO"];
+  const WEEKS_D = Array.from({length: 13}, (_, i) => `S${i + 1}`);
+  const kpiKey = `${dept.id}_${dYear}_${dQuarter}`;
+  const weeklyList = (kpiWeekly || {})[kpiKey] || [];
+  const _qStart = new Date(dYear, (dQuarter - 1) * 3, 1);
+  const currentWeekIdx = Math.min(12, Math.max(-1, Math.floor((_now - _qStart) / 86400000 / 7)));
+
+  function computeW(item) {
+    const filled = item.semanas.filter(v => v !== null && v !== undefined);
+    const lastVal = filled.length ? filled[filled.length - 1] : null;
+    const total = filled.reduce((s, v) => s + v, 0);
+    const varSem = lastVal !== null ? lastVal - item.metaSemanal : null;
+    const pct = lastVal !== null && item.metaSemanal > 0 ? (lastVal / item.metaSemanal) * 100 : null;
+    return { lastVal, total, varSem, pct };
+  }
+  function cellClsW(val, meta) {
+    if (val === null || val === undefined || !meta) return "";
+    const p = (val / meta) * 100;
+    return p >= 100 ? "kpi-cell-green" : p >= 80 ? "kpi-cell-yellow" : "kpi-cell-red";
+  }
+  function fmtW(n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    const a = Math.abs(n);
+    if (a >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (a >= 1e3) return (n / 1e3).toFixed(1) + "k";
+    return n % 1 !== 0 ? n.toFixed(1) : String(Math.round(n));
+  }
+  function updateWeekInDept(kpiId, wi, val) {
+    if (!setKpiWeekly) return;
+    setKpiWeekly(prev => ({
+      ...prev,
+      [kpiKey]: (prev[kpiKey] || []).map(item =>
+        item.id !== kpiId ? item : { ...item, semanas: item.semanas.map((v, i) => i === wi ? val : v) }
+      ),
+    }));
+    addAudit({ action: `KPI S${wi + 1} actualizado · ${kpiId}=${val}`, user: session.name, dept: dept.id, level: "info" });
+  }
+  function updateMetaInDept(kpiId, val) {
+    if (!setKpiWeekly) return;
+    setKpiWeekly(prev => ({
+      ...prev,
+      [kpiKey]: (prev[kpiKey] || []).map(item => item.id !== kpiId ? item : { ...item, metaSemanal: val }),
+    }));
+  }
 
   function updateKpi(id, field, value) {
     setKpis(prev => {
@@ -435,49 +483,93 @@ function DeptDashboard({ dept, kpis, setKpis, kpiWeekly, projects, tasks, poa, s
         </Card>
       </div>
 
-      <div className="row row--2">
-        <Card title="KPIs del departamento" sub="editables">
-          <table className="table">
-            <thead><tr><th>Métrica</th><th className="right">Actual</th><th className="right">Meta</th><th>Progreso</th><th className="right">Δ</th></tr></thead>
-            <tbody>
-              {list.map(k => {
-                const pct = Math.min(100, Math.round(k.value / k.target * 100));
-                return (
-                  <tr key={k.id}>
-                    <td><b style={{fontWeight: 500}}>{k.label}</b></td>
-                    <td className="right mono"><NumCell value={k.value} onCommit={v => updateKpi(k.id, "value", v)} readOnly={readOnly} style={{textAlign: "right", width: 70}}/></td>
-                    <td className="right mono"><NumCell value={k.target} onCommit={v => updateKpi(k.id, "target", v)} readOnly={readOnly} style={{textAlign: "right", width: 70}}/></td>
-                    <td style={{minWidth: 120}}>
-                      <div className="deptperf__bar"><span style={{width: pct + "%", background: pct >= 85 ? "var(--positive)" : pct >= 70 ? "var(--warning)" : "var(--danger)"}}/></div>
-                    </td>
-                    <td className="right mono" style={{color: k.deltaPct >= 0 ? "var(--positive)" : "var(--danger)"}}>{k.deltaPct >= 0 ? "+" : ""}{k.deltaPct.toFixed(1)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
-
-        <Card title="Proyectos abiertos" sub={`${ps.filter(p => p.status !== "done").length} activos`} headerExtra={
-          <button className="btn btn--sm" onClick={() => setView && setView("projects")}>Ver todos <Icon name="arrow" size={12}/></button>
+      <div style={{marginBottom: 14}}>
+        <Card title={`KPIs semanales · ${Q_LABELS_D[dQuarter - 1]} Trimestre ${dYear}`} sub={`${weeklyList.length} indicadores · Score: ${score}%`} noPad headerExtra={
+          <button className="btn btn--sm" onClick={() => setView && setView("kpis")}>Gestionar KPIs <Icon name="arrow" size={12}/></button>
         }>
-          <table className="table">
-            <thead><tr><th>Título</th><th>Estado</th><th>Prio</th><th>Fecha</th><th>Equipo</th></tr></thead>
-            <tbody>
-              {ps.map(p => (
-                <tr key={p.id} style={{cursor: "pointer"}} onClick={() => setView && setView("projects")} title="Abrir en Proyectos">
-                  <td>{p.title}</td>
-                  <td><StatusChip status={p.status}/></td>
-                  <td><span className={"prio prio--" + p.prio}/> <span style={{fontSize: 11, marginLeft: 4, textTransform: "capitalize"}}>{p.prio}</span></td>
-                  <td className="mono dim" style={{fontSize: 11}}>{p.due.slice(5)}</td>
-                  <td><Avatars list={p.assignees}/></td>
-                </tr>
-              ))}
-              {ps.length === 0 && <tr><td colSpan={5} className="dim" style={{textAlign: "center", padding: 20}}>Sin proyectos en este departamento.</td></tr>}
-            </tbody>
-          </table>
+          {weeklyList.length === 0 ? (
+            <div style={{padding: "24px 16px", textAlign: "center", color: "var(--text-3)", fontSize: 13}}>
+              Sin KPIs semanales para este trimestre.{" "}
+              <span style={{color: "var(--accent)", cursor: "pointer"}} onClick={() => setView && setView("kpis")}>Agregar en el gestor →</span>
+            </div>
+          ) : (
+            <div className="kpi-tbl-outer" style={{borderRadius: 0}}>
+              <table className="kpi-tbl">
+                <thead>
+                  <tr>
+                    <th className="kpi-th kpi-th-s2">Nombre KPI</th>
+                    <th className="kpi-th kpi-th-s3">Tipo</th>
+                    <th className="kpi-th kpi-th-s4">Meta Sem.</th>
+                    {WEEKS_D.map((w, i) => (
+                      <th key={i} className={"kpi-th kpi-th-wk" + (i === currentWeekIdx ? " kpi-th-wk-now" : "")}>{w}</th>
+                    ))}
+                    <th className="kpi-th kpi-th-calc">Var. Sem.</th>
+                    <th className="kpi-th kpi-th-calc">Total Trim.</th>
+                    <th className="kpi-th kpi-th-st">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weeklyList.map(item => {
+                    const c = computeW(item);
+                    const st = c.pct === null ? { label: "Sin datos",       cls: "kpi-badge kpi-st-none"   }
+                             : c.pct >= 100   ? { label: "Cumplido",         cls: "kpi-badge kpi-st-green"  }
+                             : c.pct >= 80    ? { label: "En Riesgo",        cls: "kpi-badge kpi-st-yellow" }
+                             :                  { label: "Bajo Desempeño",   cls: "kpi-badge kpi-st-red"    };
+                    return (
+                      <tr key={item.id} className="kpi-data-row">
+                        <td className="kpi-td kpi-td-s2">
+                          <TextCell value={item.label} onCommit={v => setKpiWeekly && setKpiWeekly(prev => ({
+                            ...prev, [kpiKey]: (prev[kpiKey] || []).map(it => it.id !== item.id ? it : { ...it, label: v })
+                          }))} readOnly={readOnly} style={{fontWeight: 500, fontSize: 12, width: "100%"}}/>
+                        </td>
+                        <td className="kpi-td kpi-td-s3"><span style={{fontSize: 11, color: "var(--text-2)"}}>{item.tipo}</span></td>
+                        <td className="kpi-td kpi-td-s4">
+                          <NumCell value={item.metaSemanal} onCommit={v => updateMetaInDept(item.id, v)} readOnly={readOnly}
+                            style={{width: 72, textAlign: "right", fontSize: 12}}/>
+                        </td>
+                        {item.semanas.map((v, wi) => (
+                          <td key={wi} className={"kpi-td kpi-td-wk " + cellClsW(v, item.metaSemanal) + (wi === currentWeekIdx ? " kpi-td-now" : "")}>
+                            <NumCell value={v} onCommit={val => updateWeekInDept(item.id, wi, val)} readOnly={readOnly}
+                              style={{width: 58, textAlign: "right", fontSize: 12}}/>
+                          </td>
+                        ))}
+                        <td className={"kpi-td kpi-td-calc mono " + (c.varSem !== null ? (c.varSem >= 0 ? "kpi-pos" : "kpi-neg") : "")}>
+                          {c.varSem !== null ? (c.varSem >= 0 ? "+" : "") + fmtW(c.varSem) : "—"}
+                        </td>
+                        <td className="kpi-td kpi-td-calc mono kpi-bold">{fmtW(c.total)}</td>
+                        <td className="kpi-td kpi-td-st">
+                          <span className={st.cls}>{st.label}</span>
+                          {c.pct !== null && <div style={{fontSize: 10, color: "var(--text-3)", marginTop: 2}}>{Math.min(100, Math.round(c.pct))}%</div>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </div>
+
+      <Card title="Proyectos abiertos" sub={`${ps.filter(p => p.status !== "done").length} activos`} headerExtra={
+        <button className="btn btn--sm" onClick={() => setView && setView("projects")}>Ver todos <Icon name="arrow" size={12}/></button>
+      }>
+        <table className="table">
+          <thead><tr><th>Título</th><th>Estado</th><th>Prio</th><th>Fecha</th><th>Equipo</th></tr></thead>
+          <tbody>
+            {ps.map(p => (
+              <tr key={p.id} style={{cursor: "pointer"}} onClick={() => setView && setView("projects")} title="Abrir en Proyectos">
+                <td>{p.title}</td>
+                <td><StatusChip status={p.status}/></td>
+                <td><span className={"prio prio--" + p.prio}/> <span style={{fontSize: 11, marginLeft: 4, textTransform: "capitalize"}}>{p.prio}</span></td>
+                <td className="mono dim" style={{fontSize: 11}}>{p.due.slice(5)}</td>
+                <td><Avatars list={p.assignees}/></td>
+              </tr>
+            ))}
+            {ps.length === 0 && <tr><td colSpan={5} className="dim" style={{textAlign: "center", padding: 20}}>Sin proyectos en este departamento.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
     </div>
   );
 }
