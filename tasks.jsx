@@ -422,9 +422,10 @@ function TaskModal({ t, projects, users, session, onClose, onSave, onToggle, onA
 
 function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) {
   const D = window.INDISA_DATA;
+  const isAdmin = session.role === "admin";
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
-  const [dept, setDept] = useState(effDept || "ing");
+  const [dept, setDept] = useState(isAdmin ? session.dept : (effDept || "ing"));
   const [project, setProject] = useState("");
   const [prio, setPrio] = useState("medium");
   const [status, setStatus] = useState("pending");
@@ -451,9 +452,13 @@ function NewTaskModal({ session, effDept, projects, users, onClose, onCreate }) 
           <div className="row row--2">
             <div className="field">
               <label>Departamento</label>
-              <select className="select" value={dept} onChange={e => { setDept(e.target.value); setProject(""); setAssignee(""); }}>
-                {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              {isAdmin ? (
+                <input className="input" value={D.DEPT_BY_ID[dept]?.name || dept} readOnly style={{ background: "var(--bg-1)", cursor: "not-allowed" }}/>
+              ) : (
+                <select className="select" value={dept} onChange={e => { setDept(e.target.value); setProject(""); setAssignee(""); }}>
+                  {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              )}
             </div>
             <div className="field">
               <label>Proyecto (opcional)</label>

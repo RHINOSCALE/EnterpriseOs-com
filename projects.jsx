@@ -252,8 +252,9 @@ function ProjectsPage({ session, deptScope, projects, setProjects, tasks, setTas
 
 function NewProjectModal({ session, effDept, onClose, onCreate }) {
   const D = window.INDISA_DATA;
+  const isAdmin = session.role === "admin";
   const [title, setTitle] = useState("");
-  const [dept, setDept] = useState(effDept || "ing");
+  const [dept, setDept] = useState(isAdmin ? session.dept : (effDept || "ing"));
   const [prio, setPrio] = useState("med");
   const [status, setStatus] = useState("todo");
   const [due, setDue] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return d.toISOString().slice(0, 10); });
@@ -276,9 +277,13 @@ function NewProjectModal({ session, effDept, onClose, onCreate }) {
           <div className="row row--2">
             <div className="field">
               <label>Departamento</label>
-              <select className="select" value={dept} onChange={e => setDept(e.target.value)}>
-                {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              {isAdmin ? (
+                <input className="input" value={D.DEPT_BY_ID[dept]?.name || dept} readOnly style={{ background: "var(--bg-1)", cursor: "not-allowed" }}/>
+              ) : (
+                <select className="select" value={dept} onChange={e => setDept(e.target.value)}>
+                  {D.DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              )}
             </div>
             <div className="field">
               <label>Etiqueta</label>
