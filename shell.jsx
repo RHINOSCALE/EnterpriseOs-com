@@ -31,8 +31,7 @@ function Shell({ session, view, setView, deptScope, setDeptScope, theme, setThem
                    onClick={() => { setView(it.id); if (role === "owner" && it.id === "dashboard") setDeptScope(null); }}>
                 <span className="sb__icon"><Icon name={it.icon} size={16}/></span>
                 <span>{it.label}</span>
-                {it.id === "audit" && <span className="sb__badge">12</span>}
-                {it.id === "projects" && <span className="sb__badge">{countOpenProjects(role, effDept)}</span>}
+                {it.id === "projects" && (() => { const n = countOpenProjects(role, effDept, searchData?.projects); return n > 0 ? <span className="sb__badge">{n}</span> : null; })()}
               </div>
             ))}
           </div>
@@ -126,8 +125,8 @@ function roleLabel(r) {
   return r === "owner" ? "Gerente General" : r === "admin" ? "Admin · Departamento" : "Visualizador";
 }
 
-function countOpenProjects(role, dept) {
-  const all = window.INDISA_DATA.INITIAL_PROJECTS;
+function countOpenProjects(role, dept, projects) {
+  const all = projects || {};
   if (role === "owner" && !dept) return Object.values(all).flat().filter(p => p.status !== "done").length;
   if (!dept) return 0;
   return (all[dept] || []).filter(p => p.status !== "done").length;
